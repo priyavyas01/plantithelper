@@ -1,30 +1,33 @@
 import 'package:flutter/material.dart';
-import '../../models/auth_models.dart';
+import 'package:flutter/services.dart';
 import '../../services/auth_service.dart';
-import '../../services/token_service.dart';
-import 'register_screen.dart';
-import 'forgot_password_screen.dart';
+import '../../models/auth_models.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+class ResetPasswordScreen extends StatefulWidget {
+  final String email;
+
+  const ResetPasswordScreen({super.key, required this.email});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
+  final _codeController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmController = TextEditingController();
 
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _obscureConfirm = true;
   String? _errorMessage;
 
   @override
   void dispose() {
-    _emailController.dispose();
+    _codeController.dispose();
     _passwordController.dispose();
+    _confirmController.dispose();
     super.dispose();
   }
 
@@ -37,16 +40,20 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      final tokens = await AuthService.login(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
-      await TokenService.saveTokens(
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
+      await AuthService.resetPassword(
+        email: widget.email,
+        code: _codeController.text.trim(),
+        newPassword: _passwordController.text,
       );
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/home');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Password updated! Please sign in.'),
+            backgroundColor: Color(0xFF4CAF50),
+          ),
+        );
+        // Go back to login, clearing the whole auth stack
+        Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
       }
     } on AuthError catch (e) {
       setState(() => _errorMessage = e.message);
@@ -60,19 +67,21 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
             child: Form(
               key: _formKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Icon(Icons.eco, size: 64, color: Color(0xFF4CAF50)),
+                  const Icon(Icons.lock_outlined,
+                      size: 56, color: Color(0xFF4CAF50)),
                   const SizedBox(height: 12),
                   Text(
-                    'PlantIt Helper',
+                    'Reset Password',
                     textAlign: TextAlign.center,
                     style: Theme.of(context)
                         .textTheme
@@ -81,7 +90,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Sign in to your account',
+                    'Enter the 6-digit code we sent to ${widget.email}',
                     textAlign: TextAlign.center,
                     style: Theme.of(context)
                         .textTheme
@@ -90,7 +99,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 36),
 
-                  // Inline error
                   if (_errorMessage != null) ...[
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -102,70 +110,91 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       child: Text(
                         _errorMessage!,
-                        style: TextStyle(color: Colors.red[700], fontSize: 13),
+                        style:
+                            TextStyle(color: Colors.red[700], fontSize: 13),
                       ),
                     ),
                     const SizedBox(height: 16),
                   ],
 
-                  // Email
+                  // 6-digit code field
                   TextFormField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
+                    controller: _codeController,
+                    keyboardType: TextInputType.number,
                     textInputAction: TextInputAction.next,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(6),
+                    ],
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 12),
                     decoration: const InputDecoration(
-                      labelText: 'Email',
+                      labelText: 'Reset Code',
                       border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.email_outlined),
+                      hintText: '000000',
                     ),
                     validator: (v) {
-                      if (v == null || v.trim().isEmpty) return 'Email is required';
-                      if (!v.contains('@')) return 'Enter a valid email';
+                      if (v == null || v.trim().isEmpty) return 'Code is required';
+                      if (v.length != 6) return 'Code must be 6 digits';
                       return null;
                     },
                   ),
                   const SizedBox(height: 16),
 
-                  // Password
+                  // New password
                   TextFormField(
                     controller: _passwordController,
                     obscureText: _obscurePassword,
-                    textInputAction: TextInputAction.done,
-                    onFieldSubmitted: (_) => _submit(),
+                    textInputAction: TextInputAction.next,
                     decoration: InputDecoration(
-                      labelText: 'Password',
+                      labelText: 'New Password',
                       border: const OutlineInputBorder(),
                       prefixIcon: const Icon(Icons.lock_outlined),
                       suffixIcon: IconButton(
                         icon: Icon(_obscurePassword
                             ? Icons.visibility_outlined
                             : Icons.visibility_off_outlined),
-                        onPressed: () =>
-                            setState(() => _obscurePassword = !_obscurePassword),
+                        onPressed: () => setState(
+                            () => _obscurePassword = !_obscurePassword),
                       ),
                     ),
                     validator: (v) {
                       if (v == null || v.isEmpty) return 'Password is required';
+                      if (v.length < 8) return 'At least 8 characters';
                       return null;
                     },
                   ),
-                  // Forgot password link
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                            builder: (_) => const ForgotPasswordScreen()),
-                      ),
-                      child: const Text(
-                        'Forgot password?',
-                        style: TextStyle(color: Color(0xFF4CAF50)),
+                  const SizedBox(height: 16),
+
+                  // Confirm password
+                  TextFormField(
+                    controller: _confirmController,
+                    obscureText: _obscureConfirm,
+                    textInputAction: TextInputAction.done,
+                    onFieldSubmitted: (_) => _submit(),
+                    decoration: InputDecoration(
+                      labelText: 'Confirm New Password',
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.lock_outlined),
+                      suffixIcon: IconButton(
+                        icon: Icon(_obscureConfirm
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined),
+                        onPressed: () => setState(
+                            () => _obscureConfirm = !_obscureConfirm),
                       ),
                     ),
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return 'Please confirm your password';
+                      if (v != _passwordController.text) return 'Passwords do not match';
+                      return null;
+                    },
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 24),
 
-                  // Login button
                   FilledButton(
                     onPressed: _isLoading ? null : _submit,
                     style: FilledButton.styleFrom(
@@ -177,35 +206,10 @@ class _LoginScreenState extends State<LoginScreen> {
                             height: 20,
                             width: 20,
                             child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
+                                strokeWidth: 2, color: Colors.white),
                           )
-                        : const Text('Sign In',
+                        : const Text('Reset Password',
                             style: TextStyle(fontSize: 16)),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Register link
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text("Don't have an account? ",
-                          style: TextStyle(color: Colors.grey[600])),
-                      GestureDetector(
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                              builder: (_) => const RegisterScreen()),
-                        ),
-                        child: const Text(
-                          'Sign Up',
-                          style: TextStyle(
-                            color: Color(0xFF4CAF50),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
                   ),
                 ],
               ),
