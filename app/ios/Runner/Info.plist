@@ -4,6 +4,10 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>PlantIt Helper uses your camera to photograph plants for identification.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>PlantIt Helper reads photos from your library so you can scan plants you've already photographed.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

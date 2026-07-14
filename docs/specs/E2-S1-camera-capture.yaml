@@ -1,0 +1,116 @@
+id: E2-S1
+title: Camera & Gallery Image Capture
+epic: E2 - Plant Scan & Identification
+status: approved
+
+summary: >
+  User needs a way to get a plant photo into the app before we can
+  identify it. This story adds a capture screen (camera or gallery)
+  and a preview screen (review, retake, or proceed to scan).
+  No API call yet — that's E2-S3. This story is purely about
+  getting a good image from the device into the app's hands.
+
+user_stories:
+  - as: a user who wants to identify a plant
+    i_want: to take a photo with my camera
+    so_that: I can scan it immediately without finding an existing photo
+  - as: a user who already has a plant photo
+    i_want: to pick it from my gallery
+    so_that: I don't have to retake a photo I already have
+  - as: a user who took a bad photo
+    i_want: to retake or reselect before submitting
+    so_that: I don't waste an API call on a blurry image
+
+flow:
+  - step: 1
+    description: User taps "Scan a Plant" on HomeScreen
+  - step: 2
+    description: CaptureScreen shown — two buttons, Camera and Gallery
+  - step: 3a
+    description: Camera path — OS permission dialog shown if first time
+  - step: 3b
+    description: Gallery path — OS photo picker shown
+  - step: 4
+    description: Selected image compressed to max 2MB
+  - step: 5
+    description: PreviewScreen shown with the compressed image
+  - step: 6a
+    description: User taps Retake → back to CaptureScreen
+  - step: 6b
+    description: User taps Scan → navigate to scan results (E2-S3, stubbed for now)
+
+components:
+  new:
+    - name: CaptureScreen
+      file: app/lib/screens/scan/capture_screen.dart
+      description: >
+        Two large buttons — Camera and Gallery. Requests permissions,
+        calls image_picker, compresses result, navigates to PreviewScreen.
+
+    - name: PreviewScreen
+      file: app/lib/screens/scan/preview_screen.dart
+      description: >
+        Shows the selected image full-width. Two buttons — Retake (pops back)
+        and Scan This Plant (navigates forward, stubbed until E2-S3).
+
+  modified:
+    - name: pubspec.yaml
+      file: app/pubspec.yaml
+      changes:
+        - add image_picker (camera + gallery access)
+        - add flutter_image_compress (client-side compression before upload)
+
+    - name: HomeScreen
+      file: app/lib/screens/home/home_screen.dart
+      changes:
+        - add "Scan a Plant" button that navigates to CaptureScreen
+
+    - name: Info.plist (iOS)
+      file: app/ios/Runner/Info.plist
+      changes:
+        - add NSCameraUsageDescription
+        - add NSPhotoLibraryUsageDescription
+
+acceptance_criteria:
+  - id: AC-1
+    given: User taps Camera on CaptureScreen
+    when: Permission is granted
+    then: Camera opens, photo taken, PreviewScreen shown with image
+
+  - id: AC-2
+    given: User taps Gallery on CaptureScreen
+    when: User selects a photo
+    then: PreviewScreen shown with selected image
+
+  - id: AC-3
+    given: User is on PreviewScreen
+    when: User taps Retake
+    then: Returns to CaptureScreen with no image selected
+
+  - id: AC-4
+    given: User denies camera permission
+    when: They tap Camera
+    then: Friendly message shown with "Open Settings" option
+
+  - id: AC-5
+    given: Any image is selected
+    when: It exceeds 2MB
+    then: It is compressed before reaching PreviewScreen (user never notices)
+
+tests:
+  widget:
+    - scenario: CaptureScreen shows Camera and Gallery buttons
+    - scenario: CaptureScreen shows permission denied message when permission refused
+    - scenario: PreviewScreen shows image and Retake + Scan buttons
+    - scenario: PreviewScreen Retake button pops navigation
+
+  not_tested:
+    - actual camera/gallery (hardware — needs real device)
+    - actual compression (tested via integration test on device)
+    - iOS Info.plist (platform config, not Dart)
+
+out_of_scope:
+  - Sending image to API (E2-S3)
+  - Video capture
+  - Multiple image selection
+  - EXIF rotation fix (deferred to E2-S2 C++ preprocessor)
