@@ -43,6 +43,9 @@ async def client():
 
     app.dependency_overrides[get_db] = override_get_db
 
+    # Disable rate limiting in tests so limits don't bleed across test cases
+    app.state.limiter.enabled = False
+
     # Patch init_db so the lifespan doesn't try to connect to real Postgres
     with patch("main.init_db", new_callable=AsyncMock):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:

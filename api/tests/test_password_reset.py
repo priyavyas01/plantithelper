@@ -58,7 +58,7 @@ async def test_reset_password_success_updates_password(client):
 
     with patch("router.auth.send_password_reset_email") as mock_send:
         await client.post("/auth/forgot-password", json={"email": email})
-        code = mock_send.call_args[1]["code"]
+        code = mock_send.call_args.kwargs["code"]
 
     response = await client.post(
         "/auth/reset-password",
@@ -82,7 +82,7 @@ async def test_reset_password_code_is_single_use(client):
 
     with patch("router.auth.send_password_reset_email") as mock_send:
         await client.post("/auth/forgot-password", json={"email": email})
-        code = mock_send.call_args[1]["code"]
+        code = mock_send.call_args.kwargs["code"]
 
     await client.post(
         "/auth/reset-password",
