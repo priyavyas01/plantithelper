@@ -218,7 +218,7 @@ async def reset_password(request: Request, body: ResetPasswordRequest, db: Async
         not user
         or not token
         or token.used
-        or token.expires_at < datetime.now(timezone.utc)
+        or token.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc)
     ):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired code")
 
