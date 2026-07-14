@@ -49,3 +49,22 @@ class UserResponse(BaseModel):
     # This tells Pydantic it's okay to read from SQLAlchemy model attributes,
     # not just plain dicts. Without this, response_model won't work with ORM objects.
     model_config = {"from_attributes": True}
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    code: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        if len(v.encode("utf-8")) > 72:
+            raise ValueError("Password must be 72 characters or fewer")
+        return v

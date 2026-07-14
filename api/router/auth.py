@@ -3,16 +3,24 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import hashlib
-from datetime import datetime, timezone
+import secrets
+import random
+import string
+from datetime import datetime, timezone, timedelta
 
 from db.database import get_db
 from models.user import User
 from models.refresh_token import RefreshToken
-from schemas.auth import RegisterRequest, LoginRequest, TokenResponse, RefreshRequest, UserResponse
+from models.password_reset_token import PasswordResetToken
+from schemas.auth import (
+    RegisterRequest, LoginRequest, TokenResponse, RefreshRequest,
+    UserResponse, ForgotPasswordRequest, ResetPasswordRequest,
+)
 from services.auth_service import (
     hash_password, verify_password,
     create_access_token, create_refresh_token, decode_access_token
 )
+from services.email_service import send_password_reset_email
 from core.limiter import limiter
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -157,3 +165,63 @@ async def logout(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
 async def me(current_user: User = Depends(get_current_user)):
     # get_current_user already did all the work — just return the user
     return current_user
+
+
+# --- POST /auth/forgot-password ---
+
+@router.post("/forgot-password", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("3/minute")
+async def forgot_password(request: Request, body: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.email == body.email.lower()))
+    user = result.scalar_one_or_none()
+
+    # Always return 204 even if email not found — don't reveal whether it's registered
+    if not user:
+        return
+
+    # Generate a 6-digit numeric code
+    code = ''.join(random.choices(string.digits, k=6))
+    code_hash = hashlib.sha256(code.encode()).hexdigest()
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+
+    reset_token = PasswordResetToken(
+        user_id=user.id,
+        code_hash=code_hash,
+        expires_at=expires_at,
+    )
+    db.add(reset_token)
+    await db.commit()
+
+    send_password_reset_email(to_email=user.email, code=code)
+
+
+# --- POST /auth/reset-password ---
+
+@router.post("/reset-password", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("5/minute")
+async def reset_password(request: Request, body: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.email == body.email.lower()))
+    user = result.scalar_one_or_none()
+
+    code_hash = hashlib.sha256(body.code.encode()).hexdigest()
+
+    token_result = await db.execute(
+        select(PasswordResetToken).where(
+            PasswordResetToken.user_id == user.id if user else PasswordResetToken.code_hash == code_hash,
+            PasswordResetToken.code_hash == code_hash,
+        )
+    )
+    token = token_result.scalar_one_or_none()
+
+    # Same error for all failure cases — don't hint at what went wrong
+    if (
+        not user
+        or not token
+        or token.used
+        or token.expires_at < datetime.now(timezone.utc)
+    ):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired code")
+
+    user.hashed_password = hash_password(body.new_password)
+    token.used = True
+    await db.commit()
