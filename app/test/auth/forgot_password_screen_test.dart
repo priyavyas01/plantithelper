@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/testing.dart';
 import 'package:plant_it_helper/screens/auth/forgot_password_screen.dart';
+import 'package:plant_it_helper/services/auth_service.dart';
 
 Widget _wrap(Widget child) => MaterialApp(home: child);
 
 void main() {
+  tearDown(() => AuthService.resetHttpClient());
+
   group('ForgotPasswordScreen', () {
     testWidgets('shows email field and submit button', (tester) async {
       await tester.pumpWidget(_wrap(const ForgotPasswordScreen()));
@@ -29,11 +33,13 @@ void main() {
     });
 
     testWidgets('shows network error when server unreachable', (tester) async {
+      AuthService.setHttpClient(
+          MockClient((_) async => throw Exception('Connection refused')));
+
       await tester.pumpWidget(_wrap(const ForgotPasswordScreen()));
       await tester.enterText(find.byType(TextFormField), 'test@example.com');
       await tester.tap(find.text('Send Reset Code'));
-      await tester.pump();        // starts loading
-      await tester.pump(const Duration(seconds: 5)); // wait for timeout
+      await tester.pumpAndSettle();
       expect(find.text('Could not connect to server. Try again.'), findsOneWidget);
     });
   });

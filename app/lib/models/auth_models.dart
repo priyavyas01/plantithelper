@@ -12,5 +12,6 @@ class TokenResponse {
 
 class AuthError {
   final String message;
-  AuthError(this.message);
+  final int? statusCode;
+  AuthError(this.message, {this.statusCode});
 }

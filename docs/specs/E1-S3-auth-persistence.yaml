@@ -1,0 +1,131 @@
+id: E1-S3
+title: Auth Persistence
+epic: E1 - Authentication
+status: approved
+
+# ─────────────────────────────────────────
+# WHAT & WHY
+# ─────────────────────────────────────────
+summary: >
+  Right now the app always opens on the login screen, even if the user
+  already logged in yesterday. This story adds a splash screen that checks
+  for stored tokens on launch and routes the user directly to the home
+  screen if they are still authenticated. If tokens are expired the app
+  silently refreshes them. Only if everything fails does the user see login.
+
+# ─────────────────────────────────────────
+# USER-FACING BEHAVIOUR
+# ─────────────────────────────────────────
+user_stories:
+  - as: a returning user
+    i_want: to open the app and go straight to home
+    so_that: I don't have to log in every time
+  - as: a user whose session expired overnight
+    i_want: the app to silently refresh my session
+    so_that: I still land on home without being interrupted
+  - as: a user who has been logged out (or never logged in)
+    i_want: to be taken to the login screen
+    so_that: I can authenticate before accessing the app
+
+# ─────────────────────────────────────────
+# FLOW
+# ─────────────────────────────────────────
+flow:
+  - step: 1
+    description: App launches → SplashScreen shown (logo + spinner)
+  - step: 2
+    description: Read access_token and refresh_token from secure storage
+  - step: 3
+    description: If either token is missing → go to /login
+  - step: 4
+    description: Call GET /auth/me with access token
+  - step: 5
+    description: If 200 → go to /home (happy path, fast)
+  - step: 6
+    description: If 401 → call POST /auth/refresh with refresh token
+  - step: 7
+    description: If refresh succeeds → save new token pair → go to /home
+  - step: 8
+    description: If refresh fails (401/403) → clear stored tokens → go to /login
+
+# ─────────────────────────────────────────
+# COMPONENTS
+# ─────────────────────────────────────────
+components:
+  new:
+    - name: SplashScreen
+      file: app/lib/screens/splash_screen.dart
+      description: >
+        Shown on every app launch. Runs the token check silently.
+        User sees logo + spinner for ~500ms minimum so it doesn't flash.
+
+  modified:
+    - name: AuthService
+      file: app/lib/services/auth_service.dart
+      changes:
+        - add getMe(accessToken) → calls GET /auth/me, returns UserResponse
+        - add refreshTokens(refreshToken) → calls POST /auth/refresh, returns TokenResponse
+        - update AuthError to carry an optional statusCode field
+
+    - name: TokenService
+      file: app/lib/services/token_service.dart
+      changes:
+        - add clearTokens() → deletes both access and refresh tokens from secure storage
+
+    - name: main.dart
+      file: app/lib/main.dart
+      changes:
+        - change initialRoute from /login to /splash
+        - add /splash route pointing to SplashScreen
+
+# ─────────────────────────────────────────
+# ACCEPTANCE CRITERIA
+# ─────────────────────────────────────────
+acceptance_criteria:
+  - id: AC-1
+    given: User has a valid access token stored
+    when: App launches
+    then: User lands on /home without seeing login screen
+
+  - id: AC-2
+    given: User has an expired access token but valid refresh token
+    when: App launches
+    then: App silently refreshes, saves new tokens, user lands on /home
+
+  - id: AC-3
+    given: User has no tokens stored (first launch or after logout)
+    when: App launches
+    then: User is taken to /login
+
+  - id: AC-4
+    given: Both access and refresh tokens are expired/revoked
+    when: App launches
+    then: Tokens are cleared from storage, user is taken to /login
+
+  - id: AC-5
+    given: Server is unreachable
+    when: App launches
+    then: User is taken to /login (fail safe — never hang on splash)
+
+# ─────────────────────────────────────────
+# TEST SCENARIOS
+# ─────────────────────────────────────────
+tests:
+  unit:
+    - scenario: SplashScreen routes to /home when getMe succeeds
+    - scenario: SplashScreen routes to /home after silent refresh when getMe returns 401
+    - scenario: SplashScreen routes to /login when no tokens stored
+    - scenario: SplashScreen routes to /login and clears tokens when both tokens expired
+    - scenario: SplashScreen routes to /login when server unreachable
+
+  not_tested:
+    - actual network calls (mocked in all tests)
+    - secure storage reads/writes (flutter_secure_storage is a platform plugin, tested via integration tests)
+
+# ─────────────────────────────────────────
+# OUT OF SCOPE
+# ─────────────────────────────────────────
+out_of_scope:
+  - Biometric / Face ID login (future story)
+  - "Remember me" toggle (always persists for now)
+  - Token expiry countdown / proactive refresh mid-session

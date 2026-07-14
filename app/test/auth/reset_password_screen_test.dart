@@ -10,7 +10,7 @@ void main() {
   group('ResetPasswordScreen', () {
     testWidgets('shows code, new password, and confirm fields', (tester) async {
       await tester.pumpWidget(_wrap(const ResetPasswordScreen(email: _email)));
-      expect(find.text('Reset Password'), findsOneWidget);
+      expect(find.text('Reset Password'), findsWidgets); // heading + button
       expect(find.widgetWithText(TextFormField, 'Reset Code'), findsOneWidget);
       expect(find.widgetWithText(TextFormField, 'New Password'), findsOneWidget);
       expect(find.widgetWithText(TextFormField, 'Confirm New Password'), findsOneWidget);
