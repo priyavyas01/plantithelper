@@ -117,6 +117,7 @@ flutter run
 - [x] User registration & login (JWT auth)
 - [x] Token refresh & server-side logout
 - [x] Password reset via email code
+- [x] Auth persistence — auto-login on app launch, silent token refresh
 - [ ] Plant tracking
 - [ ] Care reminders
 

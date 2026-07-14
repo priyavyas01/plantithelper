@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'screens/splash_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home/home_screen.dart';
 
@@ -21,8 +22,9 @@ class PlantItApp extends StatelessWidget {
           border: OutlineInputBorder(),
         ),
       ),
-      initialRoute: '/login',
+      initialRoute: '/splash',
       routes: {
+        '/splash': (_) => const SplashScreen(),
         '/login': (_) => const LoginScreen(),
         '/home': (_) => const HomeScreen(),
       },
