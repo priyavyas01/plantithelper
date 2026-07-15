@@ -40,7 +40,7 @@ class ScanService {
       ..headers['Authorization'] = 'Bearer $accessToken'
       ..files.add(
         http.MultipartFile.fromBytes(
-          'file',
+          'image',
           imageBytes,
           filename: 'plant.jpg',
         ),
