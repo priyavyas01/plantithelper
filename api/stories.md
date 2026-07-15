@@ -588,3 +588,54 @@ structured field alongside the conversational reply.
 | 4 | Should confidence badge stay on the collection card? | E3-S2 | **Resolved: replaced by health badge (E8-S1); show ⚠ only for low confidence** |
 
 ---
+
+---
+
+## Bugs
+
+### BUG-001: No way to return to My Plants from ResultScreen [not started]
+**Reported:** 2026-07-15
+
+**Description:**
+Once a user scans a plant and lands on ResultScreen, there is no navigation
+path back to My Plants. The only button is "Scan Another Plant" which
+double-pops to CaptureScreen. The AppBar has no back arrow
+(automaticallyImplyLeading: false). The user is trapped in the scan flow
+unless they scan again.
+
+**Steps to reproduce:**
+1. Open the app, log in
+2. Tap the FAB camera button on My Plants
+3. Take or choose a photo
+4. Tap "Scan This Plant"
+5. View the result screen
+6. There is no button or gesture to return to My Plants
+
+**Expected:** A clear path back to My Plants (back arrow, "Back to My Plants"
+button, or "Done" that pops the entire scan flow)
+
+**Actual:** Only option is "Scan Another Plant" which lands on CaptureScreen,
+not My Plants
+
+**Navigation stack at the point of the bug:**
+```
+MyPlantsScreen → CaptureScreen → PreviewScreen → ResultScreen
+                                                  ^ user is here, no way back
+```
+
+**Fix options:**
+1. Re-enable the AppBar back arrow on ResultScreen — pops one level to
+   PreviewScreen, which has its own back to CaptureScreen. Correct but
+   requires multiple taps.
+2. Add a "Done" button that pops to root (popUntil ModalRoute.withName('/home'))
+3. Replace "Scan Another Plant" with two options: "Scan Another" and "Done"
+
+**Recommended fix:** Option 2 — a "Done" button using `popUntil` that clears
+the entire scan stack in one tap. Keep "Scan Another Plant" as-is.
+
+**Affected screens:** ResultScreen
+**Dependencies:** none — but best fixed alongside E4-S1 (Plant Detail Screen).
+Fixing navigation without a working detail screen means the user gets back to
+My Plants but still cannot see the plant they just saved. The two stories form
+a complete user journey: scan → save → view detail. Recommended to pick up
+BUG-001 in the same branch as E4-S1.
