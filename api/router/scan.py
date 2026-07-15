@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
-from core.security import get_current_user
+from router.auth import get_current_user
 from models.user import User
 from schemas.scan import ScanResponse
 from services.scan_service import identify_plant
