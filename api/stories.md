@@ -30,14 +30,14 @@
 |------|-------|---------|------|
 | E1 | Foundation & Auth | 3 | 3 |
 | E2 | Plant Scan & Identification | 3 | 3 |
-| E3 | Save & My Plants Collection | 3 | 2 |
+| E3 | Save & My Plants Collection | 3 | 3 |
 | E4 | Plant Detail & Care Info | 3 | 2 |
 | E5 | Chat with Your Plant | 2 | 0 |
 | E6 | Care Schedule & Reminders | 2 | 0 |
 | E7 | Plant Journal | 1 | 0 |
 | E8 | Plant Health Tracking | 2 | 0 |
 
-**Total: 19 stories — 10 done**
+**Total: 19 stories — 11 done**
 
 ---
 
@@ -252,7 +252,8 @@ Response (200):
 
 ---
 
-### E3-S3: Client-Side Plant Data Caching [not started]
+### E3-S3: Client-Side Plant Data Caching [done]
+**Completed:** 2026-07-15
 **Goal:** Show cached plant data when the network is unavailable so the app
 remains usable on a poor connection.
 
@@ -261,18 +262,21 @@ remains usable on a poor connection.
 > see my plants list from last time, not a blank error screen.
 
 **Acceptance Criteria:**
-- [ ] After a successful GET /plants, write the list to an in-memory cache
-- [ ] On next load, if the network call fails, display the cached list with a
+- [x] After a successful GET /plants, write the list to an in-memory cache
+- [x] On next load, if the network call fails, display the cached list with a
       "Could not refresh. Showing last saved data." banner instead of error state
-- [ ] After a successful GET /plants/{id}, cache the full plant detail
-- [ ] If detail fetch fails and cache exists, show cached data silently
-- [ ] Cache cleared on logout so one user cannot see another's cached data
-- [ ] Cache invalidated after POST /plants (new plant added)
-- [ ] Cache invalidated after DELETE /plants/{id} (plant removed)
-- [ ] No expiry for MVP — valid until invalidated or logout
+- [x] After a successful GET /plants/{id}, cache the full plant detail
+- [x] If detail fetch fails and cache exists, show cached data silently
+- [x] Cache cleared on logout so one user cannot see another's cached data
+- [x] Cache invalidated after POST /plants (new plant added)
+- [x] Cache invalidated after DELETE /plants/{id} (plant removed)
+- [x] No expiry for MVP — valid until invalidated or logout
 
-**Implementation:** In-memory map in PlantService (lost on app restart).
-Persistence across restarts is a future improvement using shared_preferences.
+**Implementation:** In-memory `_PlantCache` class in `PlantService` with
+`plantList` and `plantDetails` map. `PlantListResult` wrapper communicates
+`fromCache` flag to the UI. Logging uses `[CACHE HIT]` / `[CACHE SET]` /
+`[CACHE CLEAR]` tags for easy filtering. Persistence across restarts is a
+future improvement using shared_preferences.
 
 **Dependencies:** E3-S2 complete [done], E4-S1 complete (detail cache needs the detail endpoint)
 
