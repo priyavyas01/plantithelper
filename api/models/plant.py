@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, Text, ForeignKey, JSON
+from sqlalchemy import Column, String, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from db.database import Base
@@ -19,20 +19,6 @@ class Plant(Base):
     )
     # User-editable name (e.g. "My Bedroom Monstera")
     name = Column(String(100), nullable=False)
-    # From Claude response
-    common_name = Column(String(100), nullable=False)
-    scientific_name = Column(String(150), nullable=False)
-    confidence = Column(String(10), nullable=False)  # low / medium / high — kept for analytics, not shown in UI
-    # Health assessment from Claude at scan time
-    # health is constrained to: healthy / needs_attention / concerning / unknown
-    # health_observation is one sentence describing what Claude saw
-    # Both default to safe values so old rows remain valid after migration
-    health = Column(String(20), nullable=False, server_default="unknown")
-    health_observation = Column(Text, nullable=False, server_default="")
-    # Full care guide stored as JSON — structure mirrors CareInfo schema
-    # Using generic JSON so the model works with both Postgres (JSONB) and SQLite (tests)
-    care_json = Column(JSON, nullable=False)
-    fun_fact = Column(Text, nullable=True)
     created_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -40,3 +26,15 @@ class Plant(Base):
     )
 
     user = relationship("User", back_populates="plants")
+    # All scan data lives in plant_scans — Plant is just identity + name.
+    # lazy="raise" prevents accidental sync lazy loads on an async session.
+    # Any access to plant.scans outside an explicit joinedload/selectinload will raise
+    # InvalidRequestError immediately, rather than silently causing a MissingGreenlet
+    # crash at serialization time in production.
+    scans = relationship(
+        "PlantScan",
+        back_populates="plant",
+        order_by="PlantScan.scanned_at.desc()",
+        cascade="all, delete-orphan",
+        lazy="raise",
+    )

@@ -51,21 +51,16 @@ class _PlantCache {
 }
 
 class PlantService {
-  // Swappable HTTP client — allows tests to inject a mock without network.
   static http.Client _client = http.Client();
   // ignore: use_setters_to_change_properties
   static void setHttpClient(http.Client client) => _client = client;
 
-  /// Clears all cached plant data.
-  /// Must be called on logout so one user cannot see another's data on a
-  /// shared device.
   static void clearCache() => _PlantCache.clear();
 
-  /// GET /plants — returns the current user's saved plants, newest first.
-  ///
-  /// On success: writes the list to cache and returns [fromCache]=false.
-  /// On network failure: returns the cached list with [fromCache]=true.
-  /// Throws [PlantFetchException] when the call fails and no cache exists.
+  // ---------------------------------------------------------------------------
+  // GET /plants
+  // ---------------------------------------------------------------------------
+
   static Future<PlantListResult> getPlants() async {
     final token = await TokenService.getAccessToken();
     if (token == null) {
@@ -102,27 +97,22 @@ class PlantService {
         statusCode: response.statusCode,
       );
     } on PlantFetchException {
-      rethrow; // 401/non-200 — do not fall back to cache
+      rethrow;
     } catch (e) {
-      // Network error, timeout, DNS failure, etc.
       debugPrint('[PlantService] GET /plants network error: $e');
       final cached = _PlantCache.plantList;
       if (cached != null) {
         debugPrint('[PlantService] [CACHE HIT] list → ${cached.length} plants (network unavailable)');
         return PlantListResult(cached, fromCache: true);
       }
-      throw const PlantFetchException(
-        'Could not load plants. Check your connection.',
-      );
+      throw const PlantFetchException('Could not load plants. Check your connection.');
     }
   }
 
-  /// GET /plants/{id} — returns full detail including care guide.
-  ///
-  /// On success: caches the result.
-  /// On network failure: returns the cached detail silently (no banner needed
-  /// for a detail screen — the data is unlikely to have changed).
-  /// Throws [PlantFetchException] when the call fails and no cache exists.
+  // ---------------------------------------------------------------------------
+  // GET /plants/{id}
+  // ---------------------------------------------------------------------------
+
   static Future<PlantDetail> getPlant(String id) async {
     final token = await TokenService.getAccessToken();
     if (token == null) {
@@ -155,10 +145,7 @@ class PlantService {
         throw const PlantFetchException('Plant not found.', statusCode: 404);
       }
 
-      throw PlantFetchException(
-        'Could not load plant.',
-        statusCode: response.statusCode,
-      );
+      throw PlantFetchException('Could not load plant.', statusCode: response.statusCode);
     } on PlantFetchException {
       rethrow;
     } catch (e) {
@@ -168,16 +155,14 @@ class PlantService {
         debugPrint('[PlantService] [CACHE HIT] detail → id=$id (network unavailable)');
         return cached;
       }
-      throw const PlantFetchException(
-        'Could not load plant. Check your connection.',
-      );
+      throw const PlantFetchException('Could not load plant. Check your connection.');
     }
   }
 
-  /// DELETE /plants/{id} — permanently removes a plant.
-  ///
-  /// Invalidates the list cache and removes the plant's own detail entry
-  /// so stale data is never shown after deletion.
+  // ---------------------------------------------------------------------------
+  // DELETE /plants/{id}
+  // ---------------------------------------------------------------------------
+
   static Future<void> deletePlant(String id) async {
     final token = await TokenService.getAccessToken();
     if (token == null) {
@@ -208,16 +193,13 @@ class PlantService {
       throw const PlantFetchException('Plant not found.', statusCode: 404);
     }
 
-    throw PlantFetchException(
-      'Could not delete plant.',
-      statusCode: response.statusCode,
-    );
+    throw PlantFetchException('Could not delete plant.', statusCode: response.statusCode);
   }
 
-  /// POST /plants — saves a scanned plant to the user's collection.
-  ///
-  /// Invalidates the list cache so the new plant appears on next load.
-  /// Throws [PlantSaveException] on any non-201 response.
+  // ---------------------------------------------------------------------------
+  // POST /plants  — save brand-new plant
+  // ---------------------------------------------------------------------------
+
   static Future<SavedPlant> savePlant(SavePlantRequest request) async {
     final token = await TokenService.getAccessToken();
     if (token == null) {
@@ -250,10 +232,7 @@ class PlantService {
     }
 
     if (response.statusCode == 401) {
-      throw const PlantSaveException(
-        'Session expired. Please log in again.',
-        statusCode: 401,
-      );
+      throw const PlantSaveException('Session expired. Please log in again.', statusCode: 401);
     }
     if (response.statusCode == 422) {
       final body = jsonDecode(response.body) as Map<String, dynamic>;
@@ -261,9 +240,89 @@ class PlantService {
       throw PlantSaveException(detail, statusCode: 422);
     }
 
-    throw PlantSaveException(
-      'Could not save. Try again.',
-      statusCode: response.statusCode,
-    );
+    throw PlantSaveException('Could not save. Try again.', statusCode: response.statusCode);
+  }
+
+  // ---------------------------------------------------------------------------
+  // POST /plants/{id}/scans  — add scan to existing plant
+  // ---------------------------------------------------------------------------
+
+  /// Never replaces — history always grows.
+  /// Invalidates both list and detail caches for the affected plant
+  /// so the next fetch reflects the updated scan_count and latest data.
+  static Future<void> addScan(String plantId, AddScanRequest request) async {
+    final token = await TokenService.getAccessToken();
+    if (token == null) {
+      debugPrint('[PlantService] ERROR no access token');
+      throw const PlantSaveException('Not authenticated', statusCode: 401);
+    }
+
+    final uri = Uri.parse('${AppConfig.baseUrl}/plants/$plantId/scans');
+    debugPrint('[PlantService] POST /plants/$plantId/scans');
+
+    final response = await _client
+        .post(
+          uri,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode(request.toJson()),
+        )
+        .timeout(const Duration(seconds: 15));
+
+    debugPrint('[PlantService] POST /plants/$plantId/scans → ${response.statusCode}');
+
+    if (response.statusCode == 201) {
+      _PlantCache.plantList = null;
+      _PlantCache.plantDetails.remove(plantId);
+      debugPrint('[PlantService] [CACHE CLEAR] addScan → list + detail $plantId invalidated');
+      return;
+    }
+
+    if (response.statusCode == 401) {
+      throw const PlantSaveException('Session expired.', statusCode: 401);
+    }
+    if (response.statusCode == 404) {
+      throw const PlantSaveException('Plant not found.', statusCode: 404);
+    }
+
+    throw PlantSaveException('Could not save scan.', statusCode: response.statusCode);
+  }
+
+  // ---------------------------------------------------------------------------
+  // GET /plants/{id}/scans  — paginated scan history
+  // ---------------------------------------------------------------------------
+
+  /// Not cached — always live so additions are immediately visible.
+  static Future<List<PlantScanItem>> getScanHistory(String plantId, {int page = 1}) async {
+    final token = await TokenService.getAccessToken();
+    if (token == null) {
+      throw const PlantFetchException('Not authenticated', statusCode: 401);
+    }
+
+    final uri = Uri.parse('${AppConfig.baseUrl}/plants/$plantId/scans?page=$page');
+    debugPrint('[PlantService] GET /plants/$plantId/scans page=$page');
+
+    final response = await _client
+        .get(uri, headers: {'Authorization': 'Bearer $token'})
+        .timeout(const Duration(seconds: 15));
+
+    debugPrint('[PlantService] GET /plants/$plantId/scans → ${response.statusCode}');
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final list = data['scans'] as List<dynamic>;
+      return list.map((e) => PlantScanItem.fromJson(e as Map<String, dynamic>)).toList();
+    }
+
+    if (response.statusCode == 401) {
+      throw const PlantFetchException('Session expired.', statusCode: 401);
+    }
+    if (response.statusCode == 404) {
+      throw const PlantFetchException('Plant not found.', statusCode: 404);
+    }
+
+    throw PlantFetchException('Could not load scan history.', statusCode: response.statusCode);
   }
 }

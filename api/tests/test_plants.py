@@ -272,3 +272,166 @@ async def test_delete_plant_requires_auth(client: AsyncClient):
 
     resp = await client.delete(f"/plants/{plant_id}")
     assert resp.status_code == 401
+
+
+# --- POST /plants/{id}/scans ---
+
+VALID_SCAN = {
+    "common_name": "Monstera",
+    "scientific_name": "Monstera deliciosa",
+    "confidence": "high",
+    "health": "needs_attention",
+    "health_observation": "A few yellow leaves on the lower stem.",
+    "care": {
+        "light": "Bright indirect light",
+        "water": "Water when top inch of soil is dry",
+        "humidity": "Prefers 60% humidity",
+        "temperature": "18-27C",
+        "tips": ["Move away from cold drafts"],
+    },
+}
+
+
+@pytest.mark.asyncio
+async def test_add_scan_returns_201(client: AsyncClient):
+    """POST /plants/{id}/scans returns 201 with the new scan record."""
+    token = await register_and_login(client, "scan1@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    save_resp = await client.post("/plants", json=VALID_PLANT, headers=headers)
+    plant_id = save_resp.json()["id"]
+
+    resp = await client.post(f"/plants/{plant_id}/scans", json=VALID_SCAN, headers=headers)
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["plant_id"] == plant_id
+    assert data["health"] == "needs_attention"
+    assert "id" in data
+    assert "scanned_at" in data
+
+
+@pytest.mark.asyncio
+async def test_add_scan_increments_scan_count(client: AsyncClient):
+    """scan_count in GET /plants/{id} increments after each added scan."""
+    token = await register_and_login(client, "scan2@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    save_resp = await client.post("/plants", json=VALID_PLANT, headers=headers)
+    plant_id = save_resp.json()["id"]
+
+    detail_before = await client.get(f"/plants/{plant_id}", headers=headers)
+    assert detail_before.json()["scan_count"] == 1
+
+    await client.post(f"/plants/{plant_id}/scans", json=VALID_SCAN, headers=headers)
+
+    detail_after = await client.get(f"/plants/{plant_id}", headers=headers)
+    assert detail_after.json()["scan_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_add_scan_updates_latest_health(client: AsyncClient):
+    """GET /plants/{id} returns the latest scan's health, not the original."""
+    token = await register_and_login(client, "scan3@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    save_resp = await client.post("/plants", json=VALID_PLANT, headers=headers)
+    plant_id = save_resp.json()["id"]
+
+    # First scan was 'healthy'; add a concerning scan
+    concerning = {**VALID_SCAN, "health": "concerning"}
+    await client.post(f"/plants/{plant_id}/scans", json=concerning, headers=headers)
+
+    detail = await client.get(f"/plants/{plant_id}", headers=headers)
+    assert detail.json()["health"] == "concerning"
+
+
+@pytest.mark.asyncio
+async def test_add_scan_returns_404_for_another_users_plant(client: AsyncClient):
+    """SECURITY: cannot add scans to another user's plant."""
+    token_a = await register_and_login(client, "scan4a@example.com")
+    token_b = await register_and_login(client, "scan4b@example.com")
+
+    save_resp = await client.post(
+        "/plants", json=VALID_PLANT,
+        headers={"Authorization": f"Bearer {token_a}"}
+    )
+    plant_id = save_resp.json()["id"]
+
+    resp = await client.post(
+        f"/plants/{plant_id}/scans", json=VALID_SCAN,
+        headers={"Authorization": f"Bearer {token_b}"}
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_add_scan_requires_auth(client: AsyncClient):
+    token = await register_and_login(client, "scan5@example.com")
+    save_resp = await client.post(
+        "/plants", json=VALID_PLANT,
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    plant_id = save_resp.json()["id"]
+
+    resp = await client.post(f"/plants/{plant_id}/scans", json=VALID_SCAN)
+    assert resp.status_code == 401
+
+
+# --- GET /plants/{id}/scans ---
+
+@pytest.mark.asyncio
+async def test_list_scans_returns_history(client: AsyncClient):
+    """GET /plants/{id}/scans returns all scans newest-first."""
+    token = await register_and_login(client, "hist1@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    save_resp = await client.post("/plants", json=VALID_PLANT, headers=headers)
+    plant_id = save_resp.json()["id"]
+
+    await client.post(f"/plants/{plant_id}/scans", json=VALID_SCAN, headers=headers)
+
+    resp = await client.get(f"/plants/{plant_id}/scans", headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 2
+    assert data["page"] == 1
+    assert len(data["scans"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_list_scans_404_for_another_users_plant(client: AsyncClient):
+    """SECURITY: history endpoint returns 404 for another user's plant."""
+    token_a = await register_and_login(client, "hist2a@example.com")
+    token_b = await register_and_login(client, "hist2b@example.com")
+
+    save_resp = await client.post(
+        "/plants", json=VALID_PLANT,
+        headers={"Authorization": f"Bearer {token_a}"}
+    )
+    plant_id = save_resp.json()["id"]
+
+    resp = await client.get(
+        f"/plants/{plant_id}/scans",
+        headers={"Authorization": f"Bearer {token_b}"}
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_plant_cascades_to_scans(client: AsyncClient):
+    """Deleting a plant also removes all its scans (FK CASCADE)."""
+    token = await register_and_login(client, "cascade@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    save_resp = await client.post("/plants", json=VALID_PLANT, headers=headers)
+    plant_id = save_resp.json()["id"]
+    await client.post(f"/plants/{plant_id}/scans", json=VALID_SCAN, headers=headers)
+
+    await client.delete(f"/plants/{plant_id}", headers=headers)
+
+    # Both plant and its scans are gone
+    list_resp = await client.get("/plants", headers=headers)
+    assert list_resp.json() == []
+
+    scans_resp = await client.get(f"/plants/{plant_id}/scans", headers=headers)
+    assert scans_resp.status_code == 404

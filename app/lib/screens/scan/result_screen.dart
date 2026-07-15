@@ -8,13 +8,35 @@ import '../../theme/app_theme.dart';
 class ResultScreen extends StatelessWidget {
   final ScanResult result;
 
-  // onSave is injectable for widget tests. Defaults to PlantService.savePlant in production.
+  /// When null → brand-new plant flow (shows Save sheet with name field).
+  /// When set  → re-scan flow (shows "Update [plantName]" primary action).
+  final String? plantId;
+  final String? plantName;
+
+  // Injected for tests. In production: addScan / savePlant.
+  final Future<void> Function(String plantId, AddScanRequest)? onAddScan;
   final Future<SavedPlant> Function(SavePlantRequest)? onSave;
 
-  const ResultScreen({super.key, required this.result, this.onSave});
+  const ResultScreen({
+    super.key,
+    required this.result,
+    this.plantId,
+    this.plantName,
+    this.onAddScan,
+    this.onSave,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final isReScan = plantId != null && plantName != null;
+
+    // Warn when the scanned plant's first word differs from the saved plant name.
+    // E.g. saved "Monstera", scanned "Pothos" — might be a different plant.
+    // First-word heuristic avoids false positives on "Monstera Deliciosa" vs "Monstera".
+    final bool showDifferentPlantWarning = isReScan &&
+        _firstWord(result.commonName).toLowerCase() !=
+            _firstWord(plantName!).toLowerCase();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Scan Result'),
@@ -27,16 +49,71 @@ class ResultScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (showDifferentPlantWarning) ...[
+              _DifferentPlantBanner(
+                scannedName: result.commonName,
+                savedName: plantName!,
+              ),
+              const SizedBox(height: 16),
+            ],
             _PlantHeader(result: result),
             const SizedBox(height: 24),
             CareGrid(care: result.care),
             const SizedBox(height: 32),
             _ResultActions(
               result: result,
+              plantId: plantId,
+              plantName: plantName,
+              onAddScan: onAddScan ?? PlantService.addScan,
               onSave: onSave ?? PlantService.savePlant,
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  static String _firstWord(String name) {
+    final trimmed = name.trim();
+    final space = trimmed.indexOf(' ');
+    return space == -1 ? trimmed : trimmed.substring(0, space);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Warning banner — shown when the scanned plant name differs from the saved one
+// ---------------------------------------------------------------------------
+
+class _DifferentPlantBanner extends StatelessWidget {
+  final String scannedName;
+  final String savedName;
+
+  const _DifferentPlantBanner({
+    required this.scannedName,
+    required this.savedName,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange[50],
+        border: Border.all(color: Colors.orange[300]!),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.orange[700], size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'This looks like a $scannedName, not your $savedName. '
+              'You can still add it or save it as a new plant.',
+              style: TextStyle(color: Colors.orange[800], fontSize: 13),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -89,22 +166,76 @@ class _PlantHeader extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Action buttons — stateful to track saved state
+// Action buttons — stateful to track saved/updated state
 // ---------------------------------------------------------------------------
 
 class _ResultActions extends StatefulWidget {
   final ScanResult result;
+  final String? plantId;
+  final String? plantName;
+  final Future<void> Function(String, AddScanRequest) onAddScan;
   final Future<SavedPlant> Function(SavePlantRequest) onSave;
 
-  const _ResultActions({required this.result, required this.onSave});
+  const _ResultActions({
+    required this.result,
+    required this.plantId,
+    required this.plantName,
+    required this.onAddScan,
+    required this.onSave,
+  });
 
   @override
   State<_ResultActions> createState() => _ResultActionsState();
 }
 
 class _ResultActionsState extends State<_ResultActions> {
-  bool _saved = false;
+  bool _done = false;      // true after either action completes successfully
+  bool _busy = false;
+  String? _errorMessage;
 
+  // Re-scan flow: add scan to existing plant directly — no name needed.
+  Future<void> _addScan() async {
+    setState(() {
+      _busy = true;
+      _errorMessage = null;
+    });
+
+    final request = AddScanRequest(
+      commonName: widget.result.commonName,
+      scientificName: widget.result.scientificName,
+      confidence: widget.result.confidence,
+      health: widget.result.health,
+      healthObservation: widget.result.healthObservation,
+      care: widget.result.care,
+      funFact: widget.result.funFact,
+    );
+
+    try {
+      await widget.onAddScan(widget.plantId!, request);
+      if (!mounted) return;
+      setState(() => _done = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Scan added to ${widget.plantName!}!'),
+          backgroundColor: AppTheme.green,
+        ),
+      );
+    } on PlantSaveException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _errorMessage = e.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _errorMessage = 'Something went wrong. Try again.';
+      });
+    }
+  }
+
+  // New plant flow: open name sheet, then POST /plants.
   void _openSaveSheet() {
     showModalBottomSheet<void>(
       context: context,
@@ -115,42 +246,95 @@ class _ResultActionsState extends State<_ResultActions> {
       builder: (_) => _SavePlantSheet(
         result: widget.result,
         onSave: widget.onSave,
-        onSaved: _onSaveSuccess,
-      ),
-    );
-  }
-
-  // Called by the sheet after a successful save.
-  // Runs in this widget's context — safe to update state and show a snackbar.
-  void _onSaveSuccess() {
-    if (!mounted) return;
-    setState(() => _saved = true);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Plant saved!'),
-        backgroundColor: AppTheme.green,
+        onSaved: () {
+          if (!mounted) return;
+          setState(() => _done = true);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Plant saved!'),
+              backgroundColor: AppTheme.green,
+            ),
+          );
+        },
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final isReScan = widget.plantId != null && widget.plantName != null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        FilledButton.icon(
-          onPressed: _saved ? null : _openSaveSheet,
-          icon: Icon(_saved ? Icons.bookmark : Icons.bookmark_add_outlined),
-          label: Text(_saved ? 'Saved' : 'Save This Plant'),
-          style: FilledButton.styleFrom(
-            backgroundColor: AppTheme.green,
-            disabledBackgroundColor: Colors.grey[300],
-            padding: const EdgeInsets.symmetric(vertical: 14),
+        if (_errorMessage != null) ...[
+          Container(
+            padding: const EdgeInsets.all(10),
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: Colors.red[50],
+              border: Border.all(color: Colors.red[200]!),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              _errorMessage!,
+              style: const TextStyle(color: Colors.red, fontSize: 13),
+              textAlign: TextAlign.center,
+            ),
           ),
-        ),
+        ],
+
+        // Primary action — differs by flow
+        if (isReScan) ...[
+          // Update existing plant
+          FilledButton.icon(
+            onPressed: (_done || _busy) ? null : _addScan,
+            icon: _busy
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  )
+                : Icon(_done ? Icons.check : Icons.update),
+            label: Text(_done
+                ? 'Scan Added ✓'
+                : 'Update ${widget.plantName!}'),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppTheme.green,
+              disabledBackgroundColor: Colors.grey[300],
+              padding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Secondary: save as new plant even in re-scan flow
+          OutlinedButton.icon(
+            onPressed: (_done || _busy) ? null : _openSaveSheet,
+            icon: const Icon(Icons.bookmark_add_outlined),
+            label: const Text('Save as New Plant'),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              side: const BorderSide(color: AppTheme.green),
+              foregroundColor: AppTheme.green,
+            ),
+          ),
+        ] else ...[
+          // New plant flow — original save button
+          FilledButton.icon(
+            onPressed: _done ? null : _openSaveSheet,
+            icon: Icon(_done ? Icons.bookmark : Icons.bookmark_add_outlined),
+            label: Text(_done ? 'Saved' : 'Save This Plant'),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppTheme.green,
+              disabledBackgroundColor: Colors.grey[300],
+              padding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+          ),
+        ],
+
         const SizedBox(height: 12),
         OutlinedButton.icon(
-          // Pop ResultScreen AND PreviewScreen — lands user back on CaptureScreen
+          // Pop ResultScreen AND PreviewScreen — lands user on CaptureScreen
           onPressed: () => Navigator.of(context)
             ..pop()
             ..pop(),
@@ -163,17 +347,10 @@ class _ResultActionsState extends State<_ResultActions> {
           ),
         ),
         const SizedBox(height: 12),
-        // BUG-001 fix: clears the entire scan stack in one tap.
-        // popUntil walks back through the route stack until it finds /home,
-        // so the user always lands on MyPlantsScreen regardless of how deep
-        // the scan flow pushed them.
         TextButton(
-          onPressed: () => Navigator.of(context)
-              .popUntil(ModalRoute.withName('/home')),
-          child: const Text(
-            'Done',
-            style: TextStyle(color: Colors.grey),
-          ),
+          onPressed: () =>
+              Navigator.of(context).popUntil(ModalRoute.withName('/home')),
+          child: const Text('Done', style: TextStyle(color: Colors.grey)),
         ),
       ],
     );
@@ -181,7 +358,7 @@ class _ResultActionsState extends State<_ResultActions> {
 }
 
 // ---------------------------------------------------------------------------
-// Save bottom sheet — name field + save/cancel buttons
+// Save bottom sheet — name field + save/cancel (new plant flow only)
 // ---------------------------------------------------------------------------
 
 class _SavePlantSheet extends StatefulWidget {
@@ -208,7 +385,6 @@ class _SavePlantSheetState extends State<_SavePlantSheet> {
   @override
   void initState() {
     super.initState();
-    // Pre-fill with common name — user can rename it
     _nameController = TextEditingController(text: widget.result.commonName);
   }
 
@@ -239,10 +415,9 @@ class _SavePlantSheetState extends State<_SavePlantSheet> {
 
     try {
       await widget.onSave(request);
-
       if (!mounted) return;
-      Navigator.of(context).pop(); // close the sheet
-      widget.onSaved();            // parent: update button + show snackbar
+      Navigator.of(context).pop();
+      widget.onSaved();
     } on PlantSaveException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -260,7 +435,6 @@ class _SavePlantSheetState extends State<_SavePlantSheet> {
 
   @override
   Widget build(BuildContext context) {
-    // Padding adjusts for the keyboard so the sheet scrolls up
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return Padding(
@@ -304,7 +478,6 @@ class _SavePlantSheetState extends State<_SavePlantSheet> {
             ],
             const SizedBox(height: 16),
             FilledButton(
-              // Disabled while saving prevents double-tap duplicate rows
               onPressed: _isSaving ? null : _save,
               style: FilledButton.styleFrom(
                 backgroundColor: AppTheme.green,
