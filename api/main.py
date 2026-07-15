@@ -6,7 +6,7 @@ from slowapi.errors import RateLimitExceeded
 
 from core.limiter import limiter
 from db.init_db import init_db
-from router import auth
+from router import auth, scan
 
 
 @asynccontextmanager
@@ -38,6 +38,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(scan.router)
 
 
 @app.get("/health")

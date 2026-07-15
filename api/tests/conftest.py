@@ -7,6 +7,7 @@ os.environ.setdefault("DATABASE_URL_SYNC", "sqlite:///:memory:")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-for-pytest-only-xxxxxx")
 os.environ.setdefault("RESEND_API_KEY", "test-key")
 os.environ.setdefault("RESEND_FROM_EMAIL", "test@example.com")
+os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
 import pytest
 import pytest_asyncio

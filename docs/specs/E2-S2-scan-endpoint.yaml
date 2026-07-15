@@ -1,0 +1,74 @@
+spec:
+  id: E2-S2
+  title: Plant Scan API Endpoint
+  epic: E2 - Plant Scan
+  status: approved
+
+overview: |
+  Backend endpoint that accepts a JPEG image, sends it to GPT-4o Vision,
+  and returns structured plant identification data. This is the core feature
+  of the whole app — everything else exists to support this.
+
+endpoint:
+  method: POST
+  path: /scan
+  auth: required (JWT bearer token, same as all protected routes)
+  content_type: multipart/form-data
+  request:
+    field: image
+    type: JPEG file, max 5MB
+  response:
+    200:
+      common_name: string        # e.g. "Monstera"
+      scientific_name: string    # e.g. "Monstera deliciosa"
+      confidence: low | medium | high
+      care:
+        light: string
+        water: string
+        humidity: string
+        temperature: string
+        tips: list of strings
+      fun_fact: string
+    400: image missing or not JPEG
+    401: not authenticated
+    413: image too large
+    422: GPT could not identify a plant (not a plant, or too blurry)
+    500: OpenAI API error
+
+acceptance_criteria:
+  - AC-1: POST /scan with valid JPEG returns 200 with plant name + care info
+  - AC-2: POST /scan with no image returns 400
+  - AC-3: POST /scan with image > 5MB returns 413
+  - AC-4: POST /scan with non-plant image returns 422 with helpful message
+  - AC-5: Endpoint requires JWT — unauthenticated request returns 401
+  - AC-6: Response always includes confidence field so Flutter can show uncertainty
+
+implementation:
+  new_files:
+    - api/router/scan.py       # FastAPI router with POST /scan
+    - api/services/scan_service.py   # GPT-4o Vision call + response parsing
+    - api/schemas/scan.py      # Pydantic request/response models
+    - api/tests/test_scan.py   # backend tests
+  modified_files:
+    - api/main.py              # register scan router
+    - api/requirements.txt     # add openai package
+
+  gpt_prompt: |
+    You are a botanist. Identify the plant in this image.
+    Respond ONLY with valid JSON in this exact format:
+    {
+      "identified": true,
+      "common_name": "...",
+      "scientific_name": "...",
+      "confidence": "high" | "medium" | "low",
+      "care": {
+        "light": "...",
+        "water": "...",
+        "humidity": "...",
+        "temperature": "...",
+        "tips": ["...", "..."]
+      },
+      "fun_fact": "..."
+    }
+    If no plant is visible or the image is too unclear, respond with:
+    { "identified": false, "reason": "..." }
