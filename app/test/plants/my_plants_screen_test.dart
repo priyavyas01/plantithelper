@@ -3,107 +3,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:plant_it_helper/models/scan_models.dart';
 import 'package:plant_it_helper/screens/plants/my_plants_screen.dart';
+import 'package:plant_it_helper/services/plant_service.dart';
 
 // ---------------------------------------------------------------------------
-// Test seam
-// We can't inject a fake service into MyPlantsScreen directly (it calls
-// PlantService.getPlants() statically). Instead we build a testable version
-// that accepts a getPlants callback — the same pattern we used for onSave
-// in ResultScreen.
+// Helpers
 // ---------------------------------------------------------------------------
 
 Widget _buildScreen({
-  required Future<List<PlantListItem>> Function() getPlants,
+  required Future<PlantListResult> Function() getPlants,
 }) {
   return MaterialApp(
-    routes: {
-      '/login': (_) => const Scaffold(body: Text('login')),
-    },
-    home: _TestableMyPlants(getPlants: getPlants),
+    routes: {'/login': (_) => const Scaffold(body: Text('login'))},
+    home: MyPlantsScreen(getPlants: getPlants),
   );
 }
-
-class _TestableMyPlants extends StatefulWidget {
-  final Future<List<PlantListItem>> Function() getPlants;
-  const _TestableMyPlants({required this.getPlants});
-
-  @override
-  State<_TestableMyPlants> createState() => _TestableMyPlantsState();
-}
-
-class _TestableMyPlantsState extends State<_TestableMyPlants> {
-  List<PlantListItem> _plants = [];
-  bool _isLoading = true;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-    try {
-      final plants = await widget.getPlants();
-      if (!mounted) return;
-      setState(() {
-        _plants = plants;
-        _isLoading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _error = 'Could not load plants. Pull to refresh.';
-        _isLoading = false;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('My Plants')),
-      body: RefreshIndicator(
-        onRefresh: _load,
-        child: _buildBody(),
-      ),
-    );
-  }
-
-  Widget _buildBody() {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_error != null) {
-      return ListView(
-        children: [
-          Text(_error!),
-          TextButton(onPressed: _load, child: const Text('Try Again')),
-        ],
-      );
-    }
-    if (_plants.isEmpty) {
-      return const Center(child: Text('You have no plants yet.'));
-    }
-    return ListView.builder(
-      itemCount: _plants.length,
-      itemBuilder: (_, i) => PlantCard(plant: _plants[i]),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Test data factory
-// ---------------------------------------------------------------------------
 
 PlantListItem _makePlant({
   String id = 'p1',
   String name = 'My Rose',
-  String commonName = 'Rose',
   String scientificName = 'Rosa rubiginosa',
   String confidence = 'high',
   DateTime? createdAt,
@@ -111,7 +28,7 @@ PlantListItem _makePlant({
   return PlantListItem(
     id: id,
     name: name,
-    commonName: commonName,
+    commonName: 'Rose',
     scientificName: scientificName,
     confidence: confidence,
     createdAt: createdAt ?? DateTime.now().subtract(const Duration(days: 3)),
@@ -124,19 +41,21 @@ PlantListItem _makePlant({
 
 void main() {
   group('MyPlantsScreen', () {
-    testWidgets('shows loading indicator while fetching', (tester) async {
-      // A Completer that never completes — simulates an in-flight request.
-      final completer = Completer<List<PlantListItem>>();
-      await tester.pumpWidget(_buildScreen(getPlants: () => completer.future));
-      // pump() advances one frame without settling — loading state is visible.
+    testWidgets('shows loading skeleton while fetching', (tester) async {
+      final completer = Completer<PlantListResult>();
+      await tester.pumpWidget(
+        _buildScreen(getPlants: () => completer.future),
+      );
       await tester.pump();
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
-      // Clean up so the widget tree doesn't error on teardown.
-      completer.complete([]);
+      expect(find.byKey(const Key('loading_skeleton')), findsOneWidget);
+      expect(find.byType(PlantCard), findsNothing);
+      completer.complete(PlantListResult([]));
     });
 
     testWidgets('shows empty state when no plants returned', (tester) async {
-      await tester.pumpWidget(_buildScreen(getPlants: () async => []));
+      await tester.pumpWidget(
+        _buildScreen(getPlants: () async => PlantListResult([])),
+      );
       await tester.pumpAndSettle();
       expect(find.text('You have no plants yet.'), findsOneWidget);
     });
@@ -144,13 +63,11 @@ void main() {
     testWidgets('renders a PlantCard for each returned plant', (tester) async {
       final plants = [
         _makePlant(id: 'p1', name: 'My Rose', scientificName: 'Rosa rubiginosa'),
-        _makePlant(
-          id: 'p2',
-          name: 'Snake Plant',
-          scientificName: 'Sansevieria trifasciata',
-        ),
+        _makePlant(id: 'p2', name: 'Snake Plant', scientificName: 'Sansevieria trifasciata'),
       ];
-      await tester.pumpWidget(_buildScreen(getPlants: () async => plants));
+      await tester.pumpWidget(
+        _buildScreen(getPlants: () async => PlantListResult(plants)),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('My Rose'), findsOneWidget);
@@ -167,20 +84,20 @@ void main() {
       expect(find.text('Could not load plants. Pull to refresh.'), findsOneWidget);
     });
 
-    testWidgets('does NOT show uncertain-ID badge for high-confidence plant', (tester) async {
+    testWidgets('shows uncertain-ID badge only for low-confidence plant', (tester) async {
       await tester.pumpWidget(
-        _buildScreen(getPlants: () async => [_makePlant(confidence: 'high')]),
-      );
-      await tester.pumpAndSettle();
-      expect(find.text('Uncertain ID'), findsNothing);
-    });
-
-    testWidgets('shows uncertain-ID badge for low-confidence plant', (tester) async {
-      await tester.pumpWidget(
-        _buildScreen(getPlants: () async => [_makePlant(confidence: 'low')]),
+        _buildScreen(getPlants: () async => PlantListResult([_makePlant(confidence: 'low')])),
       );
       await tester.pumpAndSettle();
       expect(find.text('Uncertain ID'), findsOneWidget);
+    });
+
+    testWidgets('does not show uncertain-ID badge for high-confidence plant', (tester) async {
+      await tester.pumpWidget(
+        _buildScreen(getPlants: () async => PlantListResult([_makePlant(confidence: 'high')])),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Uncertain ID'), findsNothing);
     });
 
     testWidgets('pull-to-refresh calls service again', (tester) async {
@@ -188,16 +105,63 @@ void main() {
       await tester.pumpWidget(
         _buildScreen(getPlants: () async {
           callCount++;
-          return [_makePlant()];
+          return PlantListResult([_makePlant()]);
         }),
       );
       await tester.pumpAndSettle();
       expect(callCount, 1);
 
-      // Fling simulates a pull-down gesture on the ListView.
       await tester.fling(find.byType(ListView), const Offset(0, 300), 1000);
       await tester.pumpAndSettle();
       expect(callCount, 2);
+    });
+
+    // ----- cache banner tests ------------------------------------------------
+
+    testWidgets('shows cache banner when result is fromCache=true', (tester) async {
+      await tester.pumpWidget(
+        _buildScreen(
+          getPlants: () async => PlantListResult(
+            [_makePlant()],
+            fromCache: true,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Could not refresh. Showing last saved data.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('does not show cache banner when result is fresh', (tester) async {
+      await tester.pumpWidget(
+        _buildScreen(
+          getPlants: () async => PlantListResult([_makePlant()]),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Could not refresh. Showing last saved data.'),
+        findsNothing,
+      );
+    });
+
+    testWidgets('still shows plant cards alongside cache banner', (tester) async {
+      final plants = [
+        _makePlant(id: 'p1', name: 'Cached Rose'),
+        _makePlant(id: 'p2', name: 'Cached Fern'),
+      ];
+      await tester.pumpWidget(
+        _buildScreen(
+          getPlants: () async => PlantListResult(plants, fromCache: true),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Could not refresh. Showing last saved data.'), findsOneWidget);
+      expect(find.text('Cached Rose'), findsOneWidget);
+      expect(find.text('Cached Fern'), findsOneWidget);
     });
   });
 }

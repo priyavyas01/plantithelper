@@ -7,9 +7,9 @@ import 'plant_detail_screen.dart';
 import '../../theme/app_theme.dart';
 
 class MyPlantsScreen extends StatefulWidget {
-  // Injectable for tests — mirrors the onSave pattern in ResultScreen.
-  // In production this is null and _loadPlants falls back to PlantService.getPlants.
-  final Future<List<PlantListItem>> Function()? getPlants;
+  // Injectable for tests. In production this is null and _loadPlants falls
+  // back to PlantService.getPlants.
+  final Future<PlantListResult> Function()? getPlants;
 
   const MyPlantsScreen({super.key, this.getPlants});
 
@@ -20,6 +20,7 @@ class MyPlantsScreen extends StatefulWidget {
 class _MyPlantsScreenState extends State<MyPlantsScreen> {
   List<PlantListItem> _plants = [];
   bool _isLoading = true;
+  bool _fromCache = false;
   String? _error;
 
   @override
@@ -33,20 +34,25 @@ class _MyPlantsScreenState extends State<MyPlantsScreen> {
     setState(() {
       _isLoading = true;
       _error = null;
+      _fromCache = false;
     });
     try {
       final fetch = widget.getPlants ?? PlantService.getPlants;
-      final plants = await fetch();
+      final result = await fetch();
       if (!mounted) return;
-      debugPrint('[MyPlantsScreen] loaded ${plants.length} plants');
+      debugPrint(
+        '[MyPlantsScreen] loaded ${result.plants.length} plants '
+        '(fromCache=${result.fromCache})',
+      );
       setState(() {
-        _plants = plants;
+        _plants = result.plants;
+        _fromCache = result.fromCache;
         _isLoading = false;
       });
     } on PlantFetchException catch (e) {
       if (!mounted) return;
       if (e.statusCode == 401) {
-        debugPrint('[MyPlantsScreen] session expired, redirecting to login');
+        debugPrint('[MyPlantsScreen] session expired — redirecting to login');
         await TokenService.clearTokens();
         if (!mounted) return;
         Navigator.of(context).pushReplacementNamed('/login');
@@ -67,8 +73,6 @@ class _MyPlantsScreenState extends State<MyPlantsScreen> {
     }
   }
 
-  // Navigates to CaptureScreen and reloads list when user returns.
-  // `await` means this method waits until the pushed route is popped.
   Future<void> _navigateToScan() async {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const CaptureScreen()),
@@ -77,6 +81,7 @@ class _MyPlantsScreenState extends State<MyPlantsScreen> {
   }
 
   Future<void> _logout() async {
+    PlantService.clearCache();
     await TokenService.clearTokens();
     if (!mounted) return;
     Navigator.of(context).pushReplacementNamed('/login');
@@ -97,8 +102,6 @@ class _MyPlantsScreenState extends State<MyPlantsScreen> {
           ),
         ],
       ),
-      // RefreshIndicator wraps the scrollable content.
-      // When the user pulls down, it calls _loadPlants() again.
       body: RefreshIndicator(
         onRefresh: _loadPlants,
         color: AppTheme.green,
@@ -122,12 +125,16 @@ class _MyPlantsScreenState extends State<MyPlantsScreen> {
     if (_plants.isEmpty) {
       return _EmptyState(onScanPressed: _navigateToScan);
     }
-    return _PlantList(plants: _plants, onRefresh: _loadPlants);
+    return _PlantList(
+      plants: _plants,
+      fromCache: _fromCache,
+      onRefresh: _loadPlants,
+    );
   }
 }
 
 // ---------------------------------------------------------------------------
-// Loading skeleton — three placeholder cards while the API is in-flight.
+// Loading skeleton
 // ---------------------------------------------------------------------------
 
 class _LoadingSkeleton extends StatelessWidget {
@@ -136,6 +143,7 @@ class _LoadingSkeleton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView.separated(
+      key: const Key('loading_skeleton'),
       padding: const EdgeInsets.all(16),
       itemCount: 3,
       separatorBuilder: (_, _) => const SizedBox(height: 12),
@@ -151,7 +159,7 @@ class _LoadingSkeleton extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Empty state — shown when the user has not saved any plants yet.
+// Empty state
 // ---------------------------------------------------------------------------
 
 class _EmptyState extends StatelessWidget {
@@ -160,7 +168,6 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ListView (not Column) so RefreshIndicator works — it needs a scrollable child.
     return ListView(
       padding: const EdgeInsets.all(40),
       children: [
@@ -200,7 +207,7 @@ class _EmptyState extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Error state — shown when the network call fails.
+// Error state
 // ---------------------------------------------------------------------------
 
 class _ErrorState extends StatelessWidget {
@@ -235,24 +242,66 @@ class _ErrorState extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Plant list — shown when plants have loaded.
-// ListView.builder is lazy: it only builds cards currently visible on screen.
-// If you have 100 plants, only ~8 are built at once, saving memory.
+// Plant list
 // ---------------------------------------------------------------------------
 
 class _PlantList extends StatelessWidget {
   final List<PlantListItem> plants;
+  final bool fromCache;
   final VoidCallback? onRefresh;
-  const _PlantList({required this.plants, this.onRefresh});
+  const _PlantList({
+    required this.plants,
+    required this.fromCache,
+    this.onRefresh,
+  });
 
   @override
   Widget build(BuildContext context) {
+    // When showing cached data, prepend a banner as the first list item so
+    // it scrolls away naturally and does not block the FAB.
+    final itemCount = plants.length + (fromCache ? 1 : 0);
+
     return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: plants.length,
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      itemCount: itemCount,
       separatorBuilder: (_, _) => const SizedBox(height: 12),
-      itemBuilder: (context, index) =>
-          PlantCard(plant: plants[index], onRefresh: onRefresh),
+      itemBuilder: (context, index) {
+        if (fromCache && index == 0) return const _CacheBanner();
+        final plant = plants[fromCache ? index - 1 : index];
+        return PlantCard(plant: plant, onRefresh: onRefresh);
+      },
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Cache banner — shown at the top of the list when offline data is displayed.
+// ---------------------------------------------------------------------------
+
+class _CacheBanner extends StatelessWidget {
+  const _CacheBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.amber[50],
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.amber.shade300),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.wifi_off_rounded, size: 18, color: Colors.amber[800]),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Could not refresh. Showing last saved data.',
+              style: TextStyle(fontSize: 13, color: Colors.amber[900]),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -349,7 +398,6 @@ class _BottomRow extends StatelessWidget {
           'Saved $savedAgo',
           style: TextStyle(fontSize: 12, color: Colors.grey[500]),
         ),
-        // Only flag uncertain IDs. Health badge replaces this in E8-S1.
         if (plant.confidence == 'low') ...[
           const SizedBox(width: 8),
           Container(

@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../config/app_config.dart';
 import '../models/auth_models.dart';
+import '../services/plant_service.dart';
 
 class AuthService {
   // Swappable in tests via setHttpClient() — production code never touches this
@@ -51,6 +52,7 @@ class AuthService {
   }
 
   static Future<void> logout({required String refreshToken}) async {
+    PlantService.clearCache();
     await _client.post(
       Uri.parse('${AppConfig.baseUrl}/auth/logout'),
       headers: {'Content-Type': 'application/json'},
