@@ -10,6 +10,9 @@ class PlantSaveException implements Exception {
   final String message;
   final int? statusCode;
   const PlantSaveException(this.message, {this.statusCode});
+
+  @override
+  String toString() => message;
 }
 
 /// Thrown when a plants API call fails unexpectedly.
@@ -17,6 +20,9 @@ class PlantFetchException implements Exception {
   final String message;
   final int? statusCode;
   const PlantFetchException(this.message, {this.statusCode});
+
+  @override
+  String toString() => message;
 }
 
 class PlantService {
@@ -54,6 +60,84 @@ class PlantService {
 
     throw PlantFetchException(
       'Could not load plants.',
+      statusCode: response.statusCode,
+    );
+  }
+
+  /// GET /plants/{id} — returns full detail for one plant including care guide.
+  ///
+  /// Throws [PlantFetchException] on failure.
+  static Future<PlantDetail> getPlant(String id) async {
+    final token = await TokenService.getAccessToken();
+    if (token == null) {
+      debugPrint('[PlantService] ERROR no access token');
+      throw const PlantFetchException('Not authenticated', statusCode: 401);
+    }
+
+    final uri = Uri.parse('${AppConfig.baseUrl}/plants/$id');
+    debugPrint('[PlantService] GET /plants/$id');
+
+    final response = await http
+        .get(uri, headers: {'Authorization': 'Bearer $token'})
+        .timeout(const Duration(seconds: 15));
+
+    debugPrint('[PlantService] GET /plants/$id status=${response.statusCode}');
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final plant = PlantDetail.fromJson(data);
+      debugPrint('[PlantService] loaded plant | name=${plant.name}');
+      return plant;
+    }
+
+    if (response.statusCode == 401) {
+      throw const PlantFetchException('Session expired.', statusCode: 401);
+    }
+
+    if (response.statusCode == 404) {
+      throw const PlantFetchException('Plant not found.', statusCode: 404);
+    }
+
+    throw PlantFetchException(
+      'Could not load plant.',
+      statusCode: response.statusCode,
+    );
+  }
+
+  /// DELETE /plants/{id} — permanently removes a plant from the collection.
+  ///
+  /// Throws [PlantFetchException] on failure.
+  static Future<void> deletePlant(String id) async {
+    final token = await TokenService.getAccessToken();
+    if (token == null) {
+      debugPrint('[PlantService] ERROR no access token');
+      throw const PlantFetchException('Not authenticated', statusCode: 401);
+    }
+
+    final uri = Uri.parse('${AppConfig.baseUrl}/plants/$id');
+    debugPrint('[PlantService] DELETE /plants/$id');
+
+    final response = await http
+        .delete(uri, headers: {'Authorization': 'Bearer $token'})
+        .timeout(const Duration(seconds: 15));
+
+    debugPrint('[PlantService] DELETE /plants/$id status=${response.statusCode}');
+
+    if (response.statusCode == 204) {
+      debugPrint('[PlantService] plant deleted | id=$id');
+      return;
+    }
+
+    if (response.statusCode == 401) {
+      throw const PlantFetchException('Session expired.', statusCode: 401);
+    }
+
+    if (response.statusCode == 404) {
+      throw const PlantFetchException('Plant not found.', statusCode: 404);
+    }
+
+    throw PlantFetchException(
+      'Could not delete plant.',
       statusCode: response.statusCode,
     );
   }

@@ -3,6 +3,8 @@ import '../../models/scan_models.dart';
 import '../../services/plant_service.dart';
 import '../../services/token_service.dart';
 import '../scan/capture_screen.dart';
+import 'plant_detail_screen.dart';
+import '../../theme/app_theme.dart';
 
 class MyPlantsScreen extends StatefulWidget {
   // Injectable for tests — mirrors the onSave pattern in ResultScreen.
@@ -85,7 +87,7 @@ class _MyPlantsScreenState extends State<MyPlantsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('My Plants'),
-        backgroundColor: const Color(0xFF4CAF50),
+        backgroundColor: AppTheme.green,
         foregroundColor: Colors.white,
         actions: [
           IconButton(
@@ -99,11 +101,11 @@ class _MyPlantsScreenState extends State<MyPlantsScreen> {
       // When the user pulls down, it calls _loadPlants() again.
       body: RefreshIndicator(
         onRefresh: _loadPlants,
-        color: const Color(0xFF4CAF50),
+        color: AppTheme.green,
         child: _buildBody(),
       ),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: const Color(0xFF4CAF50),
+        backgroundColor: AppTheme.green,
         foregroundColor: Colors.white,
         tooltip: 'Scan a plant',
         onPressed: _navigateToScan,
@@ -113,14 +115,14 @@ class _MyPlantsScreenState extends State<MyPlantsScreen> {
   }
 
   Widget _buildBody() {
-    if (_isLoading) return _LoadingSkeleton();
+    if (_isLoading) return const _LoadingSkeleton();
     if (_error != null) {
       return _ErrorState(message: _error!, onRetry: _loadPlants);
     }
     if (_plants.isEmpty) {
       return _EmptyState(onScanPressed: _navigateToScan);
     }
-    return _PlantList(plants: _plants);
+    return _PlantList(plants: _plants, onRefresh: _loadPlants);
   }
 }
 
@@ -129,6 +131,8 @@ class _MyPlantsScreenState extends State<MyPlantsScreen> {
 // ---------------------------------------------------------------------------
 
 class _LoadingSkeleton extends StatelessWidget {
+  const _LoadingSkeleton();
+
   @override
   Widget build(BuildContext context) {
     return ListView.separated(
@@ -161,7 +165,7 @@ class _EmptyState extends StatelessWidget {
       padding: const EdgeInsets.all(40),
       children: [
         const SizedBox(height: 60),
-        const Icon(Icons.eco_outlined, size: 72, color: Color(0xFF4CAF50)),
+        const Icon(Icons.eco_outlined, size: 72, color: AppTheme.green),
         const SizedBox(height: 24),
         Text(
           'You have no plants yet.',
@@ -186,7 +190,7 @@ class _EmptyState extends StatelessWidget {
           icon: const Icon(Icons.camera_alt_outlined),
           label: const Text('Scan a Plant'),
           style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFF4CAF50),
+            backgroundColor: AppTheme.green,
             padding: const EdgeInsets.symmetric(vertical: 14),
           ),
         ),
@@ -238,7 +242,8 @@ class _ErrorState extends StatelessWidget {
 
 class _PlantList extends StatelessWidget {
   final List<PlantListItem> plants;
-  const _PlantList({required this.plants});
+  final VoidCallback? onRefresh;
+  const _PlantList({required this.plants, this.onRefresh});
 
   @override
   Widget build(BuildContext context) {
@@ -246,7 +251,8 @@ class _PlantList extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       itemCount: plants.length,
       separatorBuilder: (_, _) => const SizedBox(height: 12),
-      itemBuilder: (context, index) => PlantCard(plant: plants[index]),
+      itemBuilder: (context, index) =>
+          PlantCard(plant: plants[index], onRefresh: onRefresh),
     );
   }
 }
@@ -257,7 +263,8 @@ class _PlantList extends StatelessWidget {
 
 class PlantCard extends StatelessWidget {
   final PlantListItem plant;
-  const PlantCard({super.key, required this.plant});
+  final VoidCallback? onRefresh;
+  const PlantCard({super.key, required this.plant, this.onRefresh});
 
   @override
   Widget build(BuildContext context) {
@@ -269,11 +276,13 @@ class PlantCard extends StatelessWidget {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: () {
-          // E4-S1 will build the plant detail screen.
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Plant detail coming soon!')),
+        onTap: () async {
+          final deleted = await Navigator.of(context).push<bool>(
+            MaterialPageRoute(
+              builder: (_) => PlantDetailScreen(plantId: plant.id),
+            ),
           );
+          if (deleted == true) onRefresh?.call();
         },
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -283,10 +292,10 @@ class PlantCard extends StatelessWidget {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
+                  color: AppTheme.green.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.eco, color: Color(0xFF4CAF50)),
+                child: const Icon(Icons.eco, color: AppTheme.green),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -333,7 +342,7 @@ class _BottomRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final savedAgo = _timeAgo(plant.createdAt);
+    final savedAgo = AppTheme.timeAgo(plant.createdAt);
     return Row(
       children: [
         Text(
@@ -362,15 +371,5 @@ class _BottomRow extends StatelessWidget {
         ],
       ],
     );
-  }
-
-  String _timeAgo(DateTime dt) {
-    final diff = DateTime.now().difference(dt);
-    if (diff.inMinutes < 1) return 'just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    if (diff.inDays == 1) return 'yesterday';
-    if (diff.inDays < 30) return '${diff.inDays} days ago';
-    return '${(diff.inDays / 30).floor()} months ago';
   }
 }

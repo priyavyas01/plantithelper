@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/auth_service.dart';
 import '../../models/auth_models.dart';
+import '../../theme/app_theme.dart';
 
 class ResetPasswordScreen extends StatefulWidget {
   final String email;
@@ -49,7 +50,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Password updated! Please sign in.'),
-            backgroundColor: Color(0xFF4CAF50),
+            backgroundColor: AppTheme.green,
           ),
         );
         // Go back to login, clearing the whole auth stack
@@ -78,7 +79,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Icon(Icons.lock_outlined,
-                      size: 56, color: Color(0xFF4CAF50)),
+                      size: 56, color: AppTheme.green),
                   const SizedBox(height: 12),
                   Text(
                     'Reset Password',
@@ -198,7 +199,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   FilledButton(
                     onPressed: _isLoading ? null : _submit,
                     style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF4CAF50),
+                      backgroundColor: AppTheme.green,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                     child: _isLoading

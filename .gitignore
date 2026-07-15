@@ -39,3 +39,6 @@ app/.pub/
 .env
 *.env
 .env.*
+
+# Local engineering notes
+ENGINEERING_LOG.md

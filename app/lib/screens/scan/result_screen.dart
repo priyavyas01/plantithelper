@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../models/scan_models.dart';
 import '../../services/plant_service.dart';
+import '../../widgets/confidence_badge.dart';
+import '../../widgets/care_grid.dart';
+import '../../theme/app_theme.dart';
 
 class ResultScreen extends StatelessWidget {
   final ScanResult result;
@@ -15,7 +18,7 @@ class ResultScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Scan Result'),
-        backgroundColor: const Color(0xFF4CAF50),
+        backgroundColor: AppTheme.green,
         foregroundColor: Colors.white,
         automaticallyImplyLeading: false,
       ),
@@ -26,7 +29,7 @@ class ResultScreen extends StatelessWidget {
           children: [
             _PlantHeader(result: result),
             const SizedBox(height: 24),
-            _CareGrid(care: result.care),
+            CareGrid(care: result.care),
             const SizedBox(height: 32),
             _ResultActions(
               result: result,
@@ -69,127 +72,8 @@ class _PlantHeader extends StatelessWidget {
               ),
         ),
         const SizedBox(height: 12),
-        _ConfidenceBadge(confidence: result.confidence),
+        ConfidenceBadge(confidence: result.confidence),
       ],
-    );
-  }
-}
-
-class _ConfidenceBadge extends StatelessWidget {
-  final String confidence;
-
-  const _ConfidenceBadge({required this.confidence});
-
-  @override
-  Widget build(BuildContext context) {
-    final (label, color) = switch (confidence) {
-      'high' => ('High confidence', const Color(0xFF4CAF50)),
-      'medium' => ('Medium confidence', Colors.orange),
-      _ => ('Low confidence', Colors.red),
-    };
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Care guide 2×2 grid
-// ---------------------------------------------------------------------------
-
-class _CareGrid extends StatelessWidget {
-  final CareInfo care;
-
-  const _CareGrid({required this.care});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Care Guide',
-          style: Theme.of(context)
-              .textTheme
-              .titleLarge
-              ?.copyWith(fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 12),
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-          childAspectRatio: 1.3,
-          children: [
-            _CareCard(icon: Icons.wb_sunny_outlined, label: 'Light', value: care.light),
-            _CareCard(icon: Icons.water_drop_outlined, label: 'Water', value: care.water),
-            _CareCard(icon: Icons.cloud_outlined, label: 'Humidity', value: care.humidity),
-            _CareCard(icon: Icons.thermostat, label: 'Temperature', value: care.temperature),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _CareCard extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-
-  const _CareCard({required this.icon, required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 16, color: const Color(0xFF4CAF50)),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF4CAF50),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.bodySmall,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-      ),
     );
   }
 }
@@ -234,7 +118,7 @@ class _ResultActionsState extends State<_ResultActions> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Plant saved!'),
-        backgroundColor: Color(0xFF4CAF50),
+        backgroundColor: AppTheme.green,
       ),
     );
   }
@@ -249,7 +133,7 @@ class _ResultActionsState extends State<_ResultActions> {
           icon: Icon(_saved ? Icons.bookmark : Icons.bookmark_add_outlined),
           label: Text(_saved ? 'Saved' : 'Save This Plant'),
           style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFF4CAF50),
+            backgroundColor: AppTheme.green,
             disabledBackgroundColor: Colors.grey[300],
             padding: const EdgeInsets.symmetric(vertical: 14),
           ),
@@ -264,8 +148,21 @@ class _ResultActionsState extends State<_ResultActions> {
           label: const Text('Scan Another Plant'),
           style: OutlinedButton.styleFrom(
             padding: const EdgeInsets.symmetric(vertical: 14),
-            side: const BorderSide(color: Color(0xFF4CAF50)),
-            foregroundColor: const Color(0xFF4CAF50),
+            side: const BorderSide(color: AppTheme.green),
+            foregroundColor: AppTheme.green,
+          ),
+        ),
+        const SizedBox(height: 12),
+        // BUG-001 fix: clears the entire scan stack in one tap.
+        // popUntil walks back through the route stack until it finds /home,
+        // so the user always lands on MyPlantsScreen regardless of how deep
+        // the scan flow pushed them.
+        TextButton(
+          onPressed: () => Navigator.of(context)
+              .popUntil(ModalRoute.withName('/home')),
+          child: const Text(
+            'Done',
+            style: TextStyle(color: Colors.grey),
           ),
         ),
       ],
@@ -398,7 +295,7 @@ class _SavePlantSheetState extends State<_SavePlantSheet> {
               // Disabled while saving prevents double-tap duplicate rows
               onPressed: _isSaving ? null : _save,
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF4CAF50),
+                backgroundColor: AppTheme.green,
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
               child: _isSaving

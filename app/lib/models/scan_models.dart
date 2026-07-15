@@ -130,3 +130,38 @@ class PlantListItem {
         createdAt: DateTime.parse(json['created_at'] as String),
       );
 }
+
+/// Full plant data returned by GET /plants/{id}.
+/// Includes the complete care guide — only fetch this when opening detail.
+class PlantDetail {
+  final String id;
+  final String name;
+  final String commonName;
+  final String scientificName;
+  final String confidence;
+  final CareInfo care;
+  final String? funFact;
+  final DateTime createdAt;
+
+  const PlantDetail({
+    required this.id,
+    required this.name,
+    required this.commonName,
+    required this.scientificName,
+    required this.confidence,
+    required this.care,
+    this.funFact,
+    required this.createdAt,
+  });
+
+  factory PlantDetail.fromJson(Map<String, dynamic> json) => PlantDetail(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        commonName: json['common_name'] as String,
+        scientificName: json['scientific_name'] as String,
+        confidence: json['confidence'] as String,
+        care: CareInfo.fromJson(json['care'] as Map<String, dynamic>),
+        funFact: json['fun_fact'] as String?,
+        createdAt: DateTime.parse(json['created_at'] as String),
+      );
+}

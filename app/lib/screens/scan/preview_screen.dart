@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../services/scan_service.dart';
 import '../../services/token_service.dart';
 import 'result_screen.dart';
+import '../../theme/app_theme.dart';
 
 class PreviewScreen extends StatefulWidget {
   // We receive the compressed image as raw bytes (Uint8List).
@@ -151,8 +152,8 @@ class _PreviewScreenState extends State<PreviewScreen> {
                         label: const Text('Retake'),
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 14),
-                          side: const BorderSide(color: Color(0xFF4CAF50)),
-                          foregroundColor: const Color(0xFF4CAF50),
+                          side: const BorderSide(color: AppTheme.green),
+                          foregroundColor: AppTheme.green,
                         ),
                       ),
                     ),
@@ -175,7 +176,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
                         // Label changes to 'Try Again' after an error
                         label: Text(_errorMessage != null ? 'Try Again' : 'Scan This Plant'),
                         style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF4CAF50),
+                          backgroundColor: AppTheme.green,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                         ),
                       ),
