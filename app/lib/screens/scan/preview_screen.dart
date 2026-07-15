@@ -1,15 +1,75 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'dart:typed_data'; // Uint8List — a list of bytes, used for raw image data
+import '../../services/scan_service.dart';
+import '../../services/token_service.dart';
+import 'result_screen.dart';
 
-class PreviewScreen extends StatelessWidget {
+class PreviewScreen extends StatefulWidget {
   // We receive the compressed image as raw bytes (Uint8List).
   // This is more efficient than passing a file path because:
   // - We already have the bytes in memory from compression
   // - No extra disk read needed
-  // - Easier to pass to the API later (multipart body expects bytes)
+  // - multipart/form-data body expects bytes directly
   final Uint8List imageBytes;
 
   const PreviewScreen({super.key, required this.imageBytes});
+
+  @override
+  State<PreviewScreen> createState() => _PreviewScreenState();
+}
+
+class _PreviewScreenState extends State<PreviewScreen> {
+  bool _isScanning = false;
+  String? _errorMessage;
+
+  Future<void> _scan() async {
+    setState(() {
+      _isScanning = true;
+      _errorMessage = null;
+    });
+
+    debugPrint('[PreviewScreen] scan tapped | size_bytes=${widget.imageBytes.length}');
+
+    final token = await TokenService.getAccessToken();
+    if (token == null) {
+      debugPrint('[PreviewScreen] ERROR no access token in storage');
+      if (!mounted) return;
+      setState(() {
+        _isScanning = false;
+        _errorMessage = 'Session expired. Please log in again.';
+      });
+      return;
+    }
+
+    try {
+      final result = await ScanService.scanPlant(
+        imageBytes: widget.imageBytes,
+        accessToken: token,
+      );
+      if (!mounted) return;
+      debugPrint('[PreviewScreen] success - navigating to ResultScreen | plant="${result.commonName}"');
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => ResultScreen(result: result)),
+      );
+    } on ScanException catch (e) {
+      debugPrint('[PreviewScreen] ERROR scan failed | status=${e.statusCode} message=${e.message}');
+      if (!mounted) return;
+      // 401 means token expired mid-session — send to login, don't show inline error
+      if (e.statusCode == 401) {
+        await TokenService.clearTokens();
+        if (!mounted) return; // widget could unmount during the await above
+        Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
+        return;
+      }
+      setState(() => _errorMessage = e.message);
+    } finally {
+      // In the success path _isScanning is still true here — reset it so
+      // the button is re-enabled if the user pops back from ResultScreen.
+      if (mounted && _isScanning) {
+        setState(() => _isScanning = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,11 +91,10 @@ class PreviewScreen extends StatelessWidget {
               color: Colors.black,
               child: Image.memory(
                 // Image.memory decodes raw JPEG/PNG bytes and renders them.
-                // This is different from Image.file (reads from disk) or
-                // Image.network (downloads from URL). We use memory because
-                // we already have the bytes from compression.
-                imageBytes,
-                fit: BoxFit.contain, // show the whole image, no cropping
+                // We use memory (not Image.file) because we already have the
+                // bytes from compression — no extra disk read needed.
+                widget.imageBytes,
+                fit: BoxFit.contain,
               ),
             ),
           ),
@@ -47,6 +106,23 @@ class PreviewScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Error banner — only shown when scan fails
+                if (_errorMessage != null) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.red[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red[200]!),
+                    ),
+                    child: Text(
+                      _errorMessage!,
+                      style: const TextStyle(color: Colors.red, fontSize: 13),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 Text(
                   'Does this look good?',
                   textAlign: TextAlign.center,
@@ -67,11 +143,10 @@ class PreviewScreen extends StatelessWidget {
                 const SizedBox(height: 16),
                 Row(
                   children: [
-                    // Retake — pops back to CaptureScreen (AC-3)
-                    // OutlinedButton for secondary action
+                    // Retake — disabled while scanning to prevent navigation race
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: () => Navigator.of(context).pop(),
+                        onPressed: _isScanning ? null : () => Navigator.of(context).pop(),
                         icon: const Icon(Icons.refresh),
                         label: const Text('Retake'),
                         style: OutlinedButton.styleFrom(
@@ -82,21 +157,23 @@ class PreviewScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    // Scan — FilledButton for primary action
+                    // Scan — primary action, takes twice as much space as Retake
                     Expanded(
-                      flex: 2, // takes twice as much space as Retake
+                      flex: 2,
                       child: FilledButton.icon(
-                        // Stubbed for now — E2-S3 will wire this to POST /scan
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Scan feature coming soon!'),
-                              backgroundColor: Color(0xFF4CAF50),
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.search),
-                        label: const Text('Scan This Plant'),
+                        onPressed: _isScanning ? null : _scan,
+                        icon: _isScanning
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.search),
+                        // Label changes to 'Try Again' after an error
+                        label: Text(_errorMessage != null ? 'Try Again' : 'Scan This Plant'),
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFF4CAF50),
                           padding: const EdgeInsets.symmetric(vertical: 14),

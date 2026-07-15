@@ -1,20 +1,22 @@
 import base64
 import json
+import logging
+import time
 
-from openai import AsyncOpenAI
+import anthropic
 from fastapi import HTTPException
 
 from schemas.scan import ScanResponse, CareInfo
 
-# AsyncOpenAI reads OPENAI_API_KEY from the environment automatically.
-# We create one client at module load time and reuse it — creating a new
-# HTTP connection on every request would be slow.
-_client = AsyncOpenAI()
+logger = logging.getLogger(__name__)
 
-# The prompt tells GPT exactly what we want.
-# "Respond ONLY with valid JSON" is the key instruction — without it,
-# GPT might write "Sure! Here's the plant info: {...}" which breaks json.loads().
-_SYSTEM_PROMPT = """You are an expert botanist. Identify the plant in the image provided.
+# AsyncAnthropic reads ANTHROPIC_API_KEY from the environment automatically.
+_client = anthropic.AsyncAnthropic()
+
+# Claude differs from OpenAI in one key way:
+# the system prompt is a separate parameter, not a message in the array.
+# This gives Claude clearer separation between instructions and user input.
+_SYSTEM_PROMPT = """You are an expert botanist with deep knowledge of plant identification including bulbs, tubers, corms, rhizomes, and all growth stages.
 
 Respond ONLY with valid JSON. No explanation, no markdown, no code fences. Just JSON.
 
@@ -34,7 +36,7 @@ If you can identify a plant, use this format:
   "fun_fact": "..."
 }
 
-If no plant is visible or the image is too blurry to identify, use this format:
+If no plant is visible or the image is too unclear to identify, use this format:
 {
   "identified": false,
   "reason": "..."
@@ -42,94 +44,87 @@ If no plant is visible or the image is too blurry to identify, use this format:
 
 
 async def identify_plant(image_bytes: bytes) -> ScanResponse:
-    """
-    Send image_bytes to GPT-4o Vision and parse the response into a ScanResponse.
+    size_kb = len(image_bytes) / 1024
+    logger.info(f"scan started | size_kb={size_kb:.1f}")
 
-    Raises:
-        HTTPException 422 — GPT could not identify a plant
-        HTTPException 500 — OpenAI API error or unexpected response format
-    """
-
-    # Step 1: encode bytes to base64 string.
-    # base64.b64encode() returns bytes like b"abc123==".
-    # .decode() converts those bytes to a plain Python string "abc123==".
-    # We need a string because JSON can't contain raw bytes.
+    # Convert raw bytes to base64 — Anthropic requires this for image input
     image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+    logger.debug(f"base64 encoded | original_bytes={len(image_bytes)} encoded_chars={len(image_b64)}")
 
-    # Step 2: call GPT-4o Vision.
-    # The messages list is how you talk to GPT:
-    #   - "system" message sets the rules / persona
-    #   - "user" message is the actual request
-    # We send the image as a "image_url" content block.
-    # The URL format "data:image/jpeg;base64,..." is a data URL —
-    # it embeds the image directly in the request instead of linking to it.
+    # Anthropic's message format differs from OpenAI:
+    # - image is sent as type "image" with a "source" block (not "image_url")
+    # - media_type is declared explicitly ("image/jpeg")
+    # - system prompt is a top-level parameter, not a message role
+    logger.info("anthropic request | model=claude-opus-4-5 max_tokens=1024")
+    t0 = time.monotonic()
     try:
-        response = await _client.chat.completions.create(
-            model="gpt-4o",
+        response = await _client.messages.create(
+            model="claude-opus-4-5",
+            max_tokens=1024,
+            system=_SYSTEM_PROMPT,
             messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
                 {
                     "role": "user",
                     "content": [
                         {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{image_b64}",
-                                # "auto" lets GPT decide the detail level.
-                                # "low" is cheaper but misses fine details.
-                                # "high" is more accurate but costs more tokens.
-                                "detail": "auto",
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/jpeg",
+                                "data": image_b64,
                             },
                         },
                         {
                             "type": "text",
-                            "text": "Identify this plant.",
+                            "text": "Identify this plant. If it is a bulb, tuber, or corm, identify it from its shape, colour, and any visible features.",
                         },
                     ],
-                },
+                }
             ],
-            # max_tokens caps the response length.
-            # Our JSON response is ~300 tokens max — 500 gives comfortable headroom.
-            max_tokens=500,
         )
     except Exception as e:
-        # Any network error, invalid API key, quota exceeded etc.
-        raise HTTPException(status_code=500, detail=f"OpenAI API error: {str(e)}")
+        logger.error(f"anthropic request failed | error={e}")
+        raise HTTPException(status_code=500, detail=f"Claude API error: {str(e)}")
 
-    # Step 3: extract the text content from GPT's response.
-    # response.choices is a list — we always take [0] (we only asked for one response).
-    # .message.content is the raw string GPT returned.
-    raw_text = response.choices[0].message.content
+    elapsed = time.monotonic() - t0
+    logger.info(
+        f"anthropic response received | duration_s={elapsed:.2f} "
+        f"input_tokens={response.usage.input_tokens} "
+        f"output_tokens={response.usage.output_tokens} "
+        f"stop_reason={response.stop_reason}"
+    )
 
-    # Step 4: parse the JSON string into a Python dict.
-    # json.loads() converts '{"key": "value"}' → {"key": "value"}
-    # If GPT ignored our instructions and returned prose, this will raise ValueError.
+    # Claude's response is in response.content — a list of content blocks.
+    # We always take [0] since we asked for one response and it's text.
+    raw_text = response.content[0].text
+    logger.info(f"claude raw response | preview={raw_text[:300]}")
+
     try:
         data = json.loads(raw_text)
-    except (ValueError, TypeError):
-        raise HTTPException(
-            status_code=500,
-            detail="GPT returned an unexpected response format.",
-        )
+        logger.info(f"json parsed | identified={data.get('identified')}")
+    except (ValueError, TypeError) as e:
+        logger.error(f"json parse failed | error={e} raw_preview={raw_text[:200]}")
+        raise HTTPException(status_code=500, detail="Claude returned an unexpected response format.")
 
-    # Step 5: check if GPT identified a plant.
     if not data.get("identified", False):
         reason = data.get("reason", "No plant detected in the image.")
+        logger.warning(f"plant not identified | reason={reason}")
         raise HTTPException(status_code=422, detail=reason)
 
-    # Step 6: build and return the ScanResponse.
-    # Pydantic validates the fields here — if GPT returned a confidence value
-    # we didn't expect (e.g. "very high"), Pydantic raises a ValidationError.
     try:
-        return ScanResponse(
+        result = ScanResponse(
             common_name=data["common_name"],
             scientific_name=data["scientific_name"],
             confidence=data["confidence"],
-            care=CareInfo(**data["care"]),  # ** unpacks the dict into keyword args
-            fun_fact=data["fun_fact"],
+            care=CareInfo(**data["care"]),
+            fun_fact=data.get("fun_fact"),  # .get() — Claude sometimes omits this field
         )
+        logger.info(
+            f"scan complete | name={result.common_name} "
+            f"scientific={result.scientific_name} "
+            f"confidence={result.confidence}"
+        )
+        return result
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Could not parse plant data: {str(e)}",
-        )
+        logger.error(f"response build failed | error={e} raw_data={data}")
+        raise HTTPException(status_code=500, detail=f"Could not parse plant data: {str(e)}")

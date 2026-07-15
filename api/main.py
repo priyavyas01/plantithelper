@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import logging
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
@@ -8,13 +9,27 @@ from core.limiter import limiter
 from db.init_db import init_db
 from router import auth, scan
 
+# Configure logging format for the whole app.
+# %(asctime)s  — timestamp
+# %(name)s     — which module logged it (e.g. "router.scan")
+# %(levelname)s — INFO, WARNING, ERROR
+# %(message)s  — the actual message
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s  %(name)s  %(levelname)s  %(message)s",
+    datefmt="%H:%M:%S",
+)
+
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Runs once when the server starts — creates any missing tables
+    logger.info("startup complete")
     await init_db()
+    logger.info("database ready")
     yield
-    # Anything after yield runs on shutdown (nothing needed here yet)
+    logger.info("shutdown")
 
 
 app = FastAPI(title="PlantIt Helper API", version="0.1.0", lifespan=lifespan)
