@@ -30,14 +30,14 @@
 |------|-------|---------|------|
 | E1 | Foundation & Auth | 3 | 3 |
 | E2 | Plant Scan & Identification | 3 | 3 |
-| E3 | Save & My Plants Collection | 2 | 2 |
-| E4 | Plant Detail & Care Info | 2 | 0 |
+| E3 | Save & My Plants Collection | 3 | 2 |
+| E4 | Plant Detail & Care Info | 3 | 0 |
 | E5 | Chat with Your Plant | 2 | 0 |
 | E6 | Care Schedule & Reminders | 2 | 0 |
 | E7 | Plant Journal | 1 | 0 |
 | E8 | Plant Health Tracking | 2 | 0 |
 
-**Total: 17 stories — 8 done**
+**Total: 19 stories — 8 done**
 
 ---
 
@@ -250,6 +250,33 @@ Response (200):
 
 ---
 
+---
+
+### E3-S3: Client-Side Plant Data Caching [not started]
+**Goal:** Show cached plant data when the network is unavailable so the app
+remains usable on a poor connection.
+
+**User Story:**
+> As a user, when I open the app without a network connection I still want to
+> see my plants list from last time, not a blank error screen.
+
+**Acceptance Criteria:**
+- [ ] After a successful GET /plants, write the list to an in-memory cache
+- [ ] On next load, if the network call fails, display the cached list with a
+      "Could not refresh. Showing last saved data." banner instead of error state
+- [ ] After a successful GET /plants/{id}, cache the full plant detail
+- [ ] If detail fetch fails and cache exists, show cached data silently
+- [ ] Cache cleared on logout so one user cannot see another's cached data
+- [ ] Cache invalidated after POST /plants (new plant added)
+- [ ] Cache invalidated after DELETE /plants/{id} (plant removed)
+- [ ] No expiry for MVP — valid until invalidated or logout
+
+**Implementation:** In-memory map in PlantService (lost on app restart).
+Persistence across restarts is a future improvement using shared_preferences.
+
+**Dependencies:** E3-S2 complete [done], E4-S1 complete (detail cache needs the detail endpoint)
+
+
 ## E4 — Plant Detail & Care Info
 
 ### E4-S1: Plant Detail Screen [not started]
@@ -292,6 +319,33 @@ Response (204): no body
 **Dependencies:** E3-S2 complete
 
 ---
+
+---
+
+### E4-BUG-001: No way back to My Plants from ResultScreen [not started]
+**Fix alongside E4-S1** — adding the detail screen makes this worth fixing.
+Without a working detail screen, sending the user to My Plants is only half useful.
+
+**Problem:** ResultScreen has no path back to My Plants. The only button
+("Scan Another Plant") double-pops to CaptureScreen. The AppBar back arrow
+is hidden (automaticallyImplyLeading: false).
+
+**Navigation stack at the bug:**
+```
+MyPlantsScreen -> CaptureScreen -> PreviewScreen -> ResultScreen
+                                                    ^ no way back
+```
+
+**Fix:** Add a "Done" button to ResultScreen that calls
+Navigator.popUntil(ModalRoute.withName('/home')), clearing the entire scan
+stack in one tap. Keep "Scan Another Plant" as-is for users who want to scan again.
+
+**Acceptance Criteria:**
+- [ ] "Done" button visible on ResultScreen after scan completes
+- [ ] Tapping "Done" lands on MyPlantsScreen, scan stack fully cleared
+- [ ] "Scan Another Plant" still works as before
+- [ ] If plant was saved before tapping "Done", it appears in the list immediately
+
 
 ### E4-S2: Re-scan a Plant [not started]
 **Goal:** User can re-scan an existing saved plant to update its identification and care info.
@@ -588,54 +642,3 @@ structured field alongside the conversational reply.
 | 4 | Should confidence badge stay on the collection card? | E3-S2 | **Resolved: replaced by health badge (E8-S1); show ⚠ only for low confidence** |
 
 ---
-
----
-
-## Bugs
-
-### BUG-001: No way to return to My Plants from ResultScreen [not started]
-**Reported:** 2026-07-15
-
-**Description:**
-Once a user scans a plant and lands on ResultScreen, there is no navigation
-path back to My Plants. The only button is "Scan Another Plant" which
-double-pops to CaptureScreen. The AppBar has no back arrow
-(automaticallyImplyLeading: false). The user is trapped in the scan flow
-unless they scan again.
-
-**Steps to reproduce:**
-1. Open the app, log in
-2. Tap the FAB camera button on My Plants
-3. Take or choose a photo
-4. Tap "Scan This Plant"
-5. View the result screen
-6. There is no button or gesture to return to My Plants
-
-**Expected:** A clear path back to My Plants (back arrow, "Back to My Plants"
-button, or "Done" that pops the entire scan flow)
-
-**Actual:** Only option is "Scan Another Plant" which lands on CaptureScreen,
-not My Plants
-
-**Navigation stack at the point of the bug:**
-```
-MyPlantsScreen → CaptureScreen → PreviewScreen → ResultScreen
-                                                  ^ user is here, no way back
-```
-
-**Fix options:**
-1. Re-enable the AppBar back arrow on ResultScreen — pops one level to
-   PreviewScreen, which has its own back to CaptureScreen. Correct but
-   requires multiple taps.
-2. Add a "Done" button that pops to root (popUntil ModalRoute.withName('/home'))
-3. Replace "Scan Another Plant" with two options: "Scan Another" and "Done"
-
-**Recommended fix:** Option 2 — a "Done" button using `popUntil` that clears
-the entire scan stack in one tap. Keep "Scan Another Plant" as-is.
-
-**Affected screens:** ResultScreen
-**Dependencies:** none — but best fixed alongside E4-S1 (Plant Detail Screen).
-Fixing navigation without a working detail screen means the user gets back to
-My Plants but still cannot see the plant they just saved. The two stories form
-a complete user journey: scan → save → view detail. Recommended to pick up
-BUG-001 in the same branch as E4-S1.
