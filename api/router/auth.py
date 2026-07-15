@@ -8,6 +8,7 @@ import random
 import string
 import uuid
 from datetime import datetime, timezone, timedelta
+import logging
 
 from db.database import get_db
 from models.user import User
@@ -25,6 +26,7 @@ from services.email_service import send_password_reset_email
 from core.limiter import limiter
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
 
 # HTTPBearer extracts the token from the "Authorization: Bearer <token>" header.
 # auto_error=False means we handle the 401 ourselves with a clear message.
@@ -77,13 +79,14 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
 
     user = User(email=body.email, hashed_password=hash_password(body.password))
     db.add(user)
-    await db.flush()  # flush to get user.id without committing yet
+    await db.flush()
 
     raw_token, token_hash, expires_at = create_refresh_token()
     refresh = RefreshToken(user_id=user.id, token_hash=token_hash, expires_at=expires_at)
     db.add(refresh)
 
     await db.commit()
+    logger.info(f"✅ New user registered: {body.email}")
 
     return TokenResponse(
         access_token=create_access_token(str(user.id)),
@@ -103,12 +106,14 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
     # If we said "email not found" vs "wrong password", an attacker could
     # enumerate which emails are registered in your system.
     if not user or not verify_password(body.password, user.hashed_password):
+        logger.warning(f"⚠️  Failed login attempt for: {body.email}")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     raw_token, token_hash, expires_at = create_refresh_token()
     refresh = RefreshToken(user_id=user.id, token_hash=token_hash, expires_at=expires_at)
     db.add(refresh)
     await db.commit()
+    logger.info(f"🔑 Login successful: {body.email}")
 
     return TokenResponse(
         access_token=create_access_token(str(user.id)),

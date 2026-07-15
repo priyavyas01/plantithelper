@@ -1,14 +1,14 @@
 import base64
 import json
+import logging
 
 from openai import AsyncOpenAI
 from fastapi import HTTPException
 
 from schemas.scan import ScanResponse, CareInfo
 
-# AsyncOpenAI reads OPENAI_API_KEY from the environment automatically.
-# We create one client at module load time and reuse it — creating a new
-# HTTP connection on every request would be slow.
+logger = logging.getLogger(__name__)
+
 _client = AsyncOpenAI()
 
 # The prompt tells GPT exactly what we want.
@@ -42,27 +42,11 @@ If no plant is visible or the image is too blurry to identify, use this format:
 
 
 async def identify_plant(image_bytes: bytes) -> ScanResponse:
-    """
-    Send image_bytes to GPT-4o Vision and parse the response into a ScanResponse.
+    logger.info(f"🔍 Scan request received — image size: {len(image_bytes) / 1024:.1f}KB")
 
-    Raises:
-        HTTPException 422 — GPT could not identify a plant
-        HTTPException 500 — OpenAI API error or unexpected response format
-    """
-
-    # Step 1: encode bytes to base64 string.
-    # base64.b64encode() returns bytes like b"abc123==".
-    # .decode() converts those bytes to a plain Python string "abc123==".
-    # We need a string because JSON can't contain raw bytes.
     image_b64 = base64.b64encode(image_bytes).decode("utf-8")
 
-    # Step 2: call GPT-4o Vision.
-    # The messages list is how you talk to GPT:
-    #   - "system" message sets the rules / persona
-    #   - "user" message is the actual request
-    # We send the image as a "image_url" content block.
-    # The URL format "data:image/jpeg;base64,..." is a data URL —
-    # it embeds the image directly in the request instead of linking to it.
+    logger.info("📡 Sending image to GPT-4o Vision...")
     try:
         response = await _client.chat.completions.create(
             model="gpt-4o",
@@ -93,17 +77,12 @@ async def identify_plant(image_bytes: bytes) -> ScanResponse:
             max_tokens=500,
         )
     except Exception as e:
-        # Any network error, invalid API key, quota exceeded etc.
+        logger.error(f"❌ OpenAI API error: {e}")
         raise HTTPException(status_code=500, detail=f"OpenAI API error: {str(e)}")
 
-    # Step 3: extract the text content from GPT's response.
-    # response.choices is a list — we always take [0] (we only asked for one response).
-    # .message.content is the raw string GPT returned.
     raw_text = response.choices[0].message.content
+    logger.info(f"📥 GPT response received: {raw_text[:120]}...")
 
-    # Step 4: parse the JSON string into a Python dict.
-    # json.loads() converts '{"key": "value"}' → {"key": "value"}
-    # If GPT ignored our instructions and returned prose, this will raise ValueError.
     try:
         data = json.loads(raw_text)
     except (ValueError, TypeError):
@@ -112,10 +91,12 @@ async def identify_plant(image_bytes: bytes) -> ScanResponse:
             detail="GPT returned an unexpected response format.",
         )
 
-    # Step 5: check if GPT identified a plant.
     if not data.get("identified", False):
         reason = data.get("reason", "No plant detected in the image.")
+        logger.warning(f"🌿 Plant not identified: {reason}")
         raise HTTPException(status_code=422, detail=reason)
+
+    logger.info(f"✅ Plant identified: {data.get('common_name')} ({data.get('confidence')} confidence)")
 
     # Step 6: build and return the ScanResponse.
     # Pydantic validates the fields here — if GPT returned a confidence value
