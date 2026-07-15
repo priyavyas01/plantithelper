@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:developer' as dev;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../config/app_config.dart';
@@ -26,10 +25,10 @@ class AuthService {
     );
     final body = jsonDecode(response.body);
     if (response.statusCode == 201) {
-      dev.log('register success | email=$email', name: 'AuthService');
+      debugPrint('[AuthService] register success | email=$email');
       return TokenResponse.fromJson(body);
     }
-    dev.log('register failed | email=$email status=${response.statusCode}', name: 'AuthService');
+    debugPrint('[AuthService] ERROR register failed | email=$email status=${response.statusCode}');
     throw AuthError(body['detail'] ?? 'Registration failed');
   }
 
@@ -44,10 +43,10 @@ class AuthService {
     );
     final body = jsonDecode(response.body);
     if (response.statusCode == 200) {
-      dev.log('login success | email=$email', name: 'AuthService');
+      debugPrint('[AuthService] login success | email=$email');
       return TokenResponse.fromJson(body);
     }
-    dev.log('login failed | email=$email status=${response.statusCode}', name: 'AuthService');
+    debugPrint('[AuthService] ERROR login failed | email=$email status=${response.statusCode}');
     throw AuthError(body['detail'] ?? 'Login failed');
   }
 
@@ -66,7 +65,7 @@ class AuthService {
       headers: {'Authorization': 'Bearer $accessToken'},
     );
     if (response.statusCode != 200) {
-      dev.log('getMe failed | status=${response.statusCode}', name: 'AuthService');
+      debugPrint('[AuthService] ERROR getMe failed | status=${response.statusCode}');
       throw AuthError('Unauthorized', statusCode: response.statusCode);
     }
   }
@@ -79,10 +78,10 @@ class AuthService {
       body: jsonEncode({'refresh_token': refreshToken}),
     );
     if (response.statusCode == 200) {
-      dev.log('token refresh success', name: 'AuthService');
+      debugPrint('[AuthService] token refresh success');
       return TokenResponse.fromJson(jsonDecode(response.body));
     }
-    dev.log('token refresh failed | status=${response.statusCode}', name: 'AuthService');
+    debugPrint('[AuthService] ERROR token refresh failed | status=${response.statusCode}');
     throw AuthError('Session expired', statusCode: response.statusCode);
   }
 

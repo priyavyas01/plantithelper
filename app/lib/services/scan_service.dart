@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:developer' as dev;
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -30,10 +29,7 @@ class ScanService {
     required Uint8List imageBytes,
     required String accessToken,
   }) async {
-    dev.log(
-      'scan started | size_bytes=${imageBytes.length}',
-      name: 'ScanService',
-    );
+    debugPrint('[ScanService] scan started | size_bytes=${imageBytes.length}');
 
     final uri = Uri.parse('${AppConfig.baseUrl}/scan');
     final request = http.MultipartRequest('POST', uri)
@@ -46,14 +42,14 @@ class ScanService {
         ),
       );
 
-    dev.log('sending multipart request | url=$uri', name: 'ScanService');
+    debugPrint('[ScanService] POST $uri');
 
     final http.StreamedResponse streamed;
     try {
       streamed = await _client.send(request).timeout(
         const Duration(seconds: 30),
         onTimeout: () {
-          dev.log('scan timed out after 30s', name: 'ScanService');
+          debugPrint('[ScanService] ERROR request timed out after 30s');
           throw ScanException(
             'Request timed out. Please try again.',
             statusCode: 408,
@@ -62,11 +58,7 @@ class ScanService {
       );
     } catch (e) {
       if (e is ScanException) rethrow;
-      dev.log(
-        'network error | could not reach server',
-        name: 'ScanService',
-        error: e,
-      );
+      debugPrint('[ScanService] ERROR network error | $e');
       throw ScanException(
         'Could not connect to server. Check your network.',
         statusCode: 0,
@@ -74,24 +66,18 @@ class ScanService {
     }
 
     final response = await http.Response.fromStream(streamed);
-    dev.log(
-      'response received | status=${response.statusCode}',
-      name: 'ScanService',
-    );
+    debugPrint('[ScanService] response status=${response.statusCode}');
 
     if (response.statusCode == 200) {
       final result = ScanResult.fromJson(
         jsonDecode(response.body) as Map<String, dynamic>,
       );
-      dev.log(
-        'scan complete | name="${result.commonName}" confidence=${result.confidence}',
-        name: 'ScanService',
-      );
+      debugPrint('[ScanService] scan complete | name="${result.commonName}" confidence=${result.confidence}');
       return result;
     }
 
     if (response.statusCode == 422) {
-      dev.log('not a plant detected | 422 returned', name: 'ScanService');
+      debugPrint('[ScanService] 422 no plant detected');
       throw ScanException(
         'No plant detected. Try a clearer photo.',
         statusCode: 422,
@@ -99,17 +85,22 @@ class ScanService {
     }
 
     if (response.statusCode == 401) {
-      dev.log('unauthorized | 401 returned', name: 'ScanService');
+      debugPrint('[ScanService] 401 unauthorized - token expired');
       throw ScanException(
         'Session expired. Please log in again.',
         statusCode: 401,
       );
     }
 
-    dev.log(
-      'scan failed | status=${response.statusCode}',
-      name: 'ScanService',
-    );
+    if (response.statusCode == 413) {
+      debugPrint('[ScanService] 413 image too large');
+      throw ScanException(
+        'Image is too large. Try a smaller photo.',
+        statusCode: 413,
+      );
+    }
+
+    debugPrint('[ScanService] ERROR unexpected status=${response.statusCode}');
     throw ScanException(
       'Something went wrong. Please try again.',
       statusCode: response.statusCode,

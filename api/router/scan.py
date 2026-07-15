@@ -18,17 +18,20 @@ async def scan_plant(
 ):
     """
     POST /scan
-    Accepts a JPEG image, identifies the plant using GPT-4o Vision,
+    Accepts a JPEG/PNG/HEIC image, identifies the plant using Claude Opus,
     and returns structured plant information.
     """
 
     # Validate file type.
-    # content_type is set by the client — it can be spoofed, but it's a
-    # reasonable first check.
-    if image.content_type not in ("image/jpeg", "image/jpg", "image/png"):
+    # content_type is set by the client and can be None or spoofed,
+    # so we treat it as a hint only. Flutter's http package doesn't always
+    # set content_type on multipart files — treat None as acceptable and
+    # let Claude handle truly invalid image data downstream.
+    allowed_types = {"image/jpeg", "image/jpg", "image/png", "image/heic", "image/heif"}
+    if image.content_type and image.content_type not in allowed_types:
         raise HTTPException(
             status_code=400,
-            detail="Only JPEG and PNG images are supported.",
+            detail="Only JPEG, PNG, and HEIC images are supported.",
         )
 
     # Read all bytes into memory.

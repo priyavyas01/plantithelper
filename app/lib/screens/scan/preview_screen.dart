@@ -1,4 +1,3 @@
-import 'dart:developer' as dev;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../../services/scan_service.dart';
@@ -29,14 +28,11 @@ class _PreviewScreenState extends State<PreviewScreen> {
       _errorMessage = null;
     });
 
-    dev.log(
-      'scan button tapped | size_bytes=${widget.imageBytes.length}',
-      name: 'PreviewScreen',
-    );
+    debugPrint('[PreviewScreen] scan tapped | size_bytes=${widget.imageBytes.length}');
 
     final token = await TokenService.getAccessToken();
     if (token == null) {
-      dev.log('scan aborted | no access token in storage', name: 'PreviewScreen');
+      debugPrint('[PreviewScreen] ERROR no access token in storage');
       if (!mounted) return;
       setState(() {
         _isScanning = false;
@@ -51,20 +47,20 @@ class _PreviewScreenState extends State<PreviewScreen> {
         accessToken: token,
       );
       if (!mounted) return;
-      dev.log(
-        'navigating to ResultScreen | name="${result.commonName}"',
-        name: 'PreviewScreen',
-      );
+      debugPrint('[PreviewScreen] success - navigating to ResultScreen | plant="${result.commonName}"');
       Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => ResultScreen(result: result)),
       );
     } on ScanException catch (e) {
-      dev.log(
-        'scan error | status=${e.statusCode} message=${e.message}',
-        name: 'PreviewScreen',
-        error: e,
-      );
+      debugPrint('[PreviewScreen] ERROR scan failed | status=${e.statusCode} message=${e.message}');
       if (!mounted) return;
+      // 401 means token expired mid-session — send to login, don't show inline error
+      if (e.statusCode == 401) {
+        await TokenService.clearTokens();
+        if (!mounted) return; // widget could unmount during the await above
+        Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
+        return;
+      }
       setState(() => _errorMessage = e.message);
     } finally {
       // In the success path _isScanning is still true here — reset it so

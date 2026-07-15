@@ -61,27 +61,41 @@ void main() {
     });
 
     testWidgets('Scan Another pops back past ResultScreen', (tester) async {
-      // Push ResultScreen on top of a placeholder to verify double-pop works
+      // The real app stack is CaptureScreen → PreviewScreen → ResultScreen.
+      // We need THREE levels so the double-pop lands on the root, not below it.
+      // Two placeholder levels simulate Capture and Preview.
       await tester.pumpWidget(MaterialApp(
-        home: Builder(builder: (ctx) => TextButton(
-          onPressed: () => Navigator.of(ctx).push(
-            MaterialPageRoute(
-              builder: (_) => ResultScreen(result: _mockResult()),
-            ),
+        home: Builder(builder: (captureCtx) => TextButton(
+          onPressed: () => Navigator.of(captureCtx).push(
+            MaterialPageRoute(builder: (_) => Builder(
+              builder: (previewCtx) => TextButton(
+                onPressed: () => Navigator.of(previewCtx).push(
+                  MaterialPageRoute(
+                    builder: (_) => ResultScreen(result: _mockResult()),
+                  ),
+                ),
+                child: const Text('GoToResult'),
+              ),
+            )),
           ),
-          child: const Text('Open'),
+          child: const Text('Capture'),
         )),
       ));
 
-      await tester.tap(find.text('Open'));
+      // Navigate: Capture → Preview → ResultScreen
+      await tester.tap(find.text('Capture'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('GoToResult'));
       await tester.pumpAndSettle();
       expect(find.text('Scan Another Plant'), findsOneWidget);
 
+      // Double-pop: removes ResultScreen then Preview → lands on Capture
+      await tester.ensureVisible(find.text('Scan Another Plant'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Scan Another Plant'));
       await tester.pumpAndSettle();
-      // ResultScreen is gone — we're back on the placeholder
       expect(find.text('Scan Another Plant'), findsNothing);
-      expect(find.text('Open'), findsOneWidget);
+      expect(find.text('Capture'), findsOneWidget);
     });
   });
 }

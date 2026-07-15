@@ -97,7 +97,7 @@ async def identify_plant(image_bytes: bytes) -> ScanResponse:
     # Claude's response is in response.content — a list of content blocks.
     # We always take [0] since we asked for one response and it's text.
     raw_text = response.content[0].text
-    logger.debug(f"raw claude output | content={raw_text}")
+    logger.info(f"claude raw response | preview={raw_text[:300]}")
 
     try:
         data = json.loads(raw_text)
@@ -117,7 +117,7 @@ async def identify_plant(image_bytes: bytes) -> ScanResponse:
             scientific_name=data["scientific_name"],
             confidence=data["confidence"],
             care=CareInfo(**data["care"]),
-            fun_fact=data["fun_fact"],
+            fun_fact=data.get("fun_fact"),  # .get() — Claude sometimes omits this field
         )
         logger.info(
             f"scan complete | name={result.common_name} "
