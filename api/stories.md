@@ -31,12 +31,12 @@
 | E1 | Foundation & Auth | 3 | 3 |
 | E2 | Plant Scan & Identification | 3 | 3 |
 | E3 | Save & My Plants Collection | 3 | 3 |
-| E4 | Plant Detail, Health & Scan History | 4 | 2 |
+| E4 | Plant Detail, Health & Scan History | 4 | 3 |
 | E5 | Chat with Your Plant | 3 | 0 |
 | E6 | Care Schedule & Reminders | 2 | 0 |
 | E7 | Plant Journal | 1 | 0 |
 
-**Total: 19 stories — 11 done**
+**Total: 19 stories — 12 done**
 
 **Roadmap rationale (updated 2026-07-15):**
 - E8 (Plant Health Tracking) was dissolved. Health assessment belongs at scan time
@@ -364,7 +364,7 @@ stack in one tap. Keep "Scan Another Plant" as-is for users who want to scan aga
 - [x] If plant was saved before tapping "Done", it appears in the list immediately
 
 
-### E4-S3: Health Assessment at Scan Time [not started]
+### E4-S3: Health Assessment at Scan Time [done]
 **Goal:** Every scan returns a plain-English, actionable health observation alongside
 plant identification. Health replaces confidence everywhere in the UI — confidence is
 an AI-internal metric the user gains nothing from seeing. Health is something they can
