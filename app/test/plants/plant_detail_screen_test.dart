@@ -9,7 +9,7 @@ import 'package:plant_it_helper/services/plant_service.dart';
 // Helpers
 // ---------------------------------------------------------------------------
 
-PlantDetail _makePlant({String? funFact}) => PlantDetail(
+PlantDetail _makePlant({String? funFact, int scanCount = 1}) => PlantDetail(
       id: 'abc-123',
       name: 'My Monstera',
       commonName: 'Monstera',
@@ -26,6 +26,7 @@ PlantDetail _makePlant({String? funFact}) => PlantDetail(
       ),
       funFact: funFact,
       createdAt: DateTime.now().subtract(const Duration(days: 3)),
+      scanCount: scanCount,
     );
 
 Widget _wrap(Widget child) => MaterialApp(

@@ -6,14 +6,18 @@ import 'result_screen.dart';
 import '../../theme/app_theme.dart';
 
 class PreviewScreen extends StatefulWidget {
-  // We receive the compressed image as raw bytes (Uint8List).
-  // This is more efficient than passing a file path because:
-  // - We already have the bytes in memory from compression
-  // - No extra disk read needed
-  // - multipart/form-data body expects bytes directly
   final Uint8List imageBytes;
+  // Passed through from CaptureScreen when invoked via "Scan Again".
+  // Null for brand-new plant scans.
+  final String? plantId;
+  final String? plantName;
 
-  const PreviewScreen({super.key, required this.imageBytes});
+  const PreviewScreen({
+    super.key,
+    required this.imageBytes,
+    this.plantId,
+    this.plantName,
+  });
 
   @override
   State<PreviewScreen> createState() => _PreviewScreenState();
@@ -50,7 +54,13 @@ class _PreviewScreenState extends State<PreviewScreen> {
       if (!mounted) return;
       debugPrint('[PreviewScreen] success - navigating to ResultScreen | plant="${result.commonName}"');
       Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => ResultScreen(result: result)),
+        MaterialPageRoute(
+          builder: (_) => ResultScreen(
+            result: result,
+            plantId: widget.plantId,
+            plantName: widget.plantName,
+          ),
+        ),
       );
     } on ScanException catch (e) {
       debugPrint('[PreviewScreen] ERROR scan failed | status=${e.statusCode} message=${e.message}');

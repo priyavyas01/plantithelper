@@ -6,7 +6,13 @@ import 'preview_screen.dart';
 import '../../theme/app_theme.dart';
 
 class CaptureScreen extends StatefulWidget {
-  const CaptureScreen({super.key});
+  /// When navigating from PlantDetailScreen → "Scan Again",
+  /// pass the plant's id and name so they flow through to ResultScreen.
+  /// When null, the user is scanning a brand-new plant (default flow).
+  final String? plantId;
+  final String? plantName;
+
+  const CaptureScreen({super.key, this.plantId, this.plantName});
 
   @override
   State<CaptureScreen> createState() => _CaptureScreenState();
@@ -67,7 +73,11 @@ class _CaptureScreenState extends State<CaptureScreen> {
         // MaterialPageRoute with builder is the standard way to pass data between screens.
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => PreviewScreen(imageBytes: imageBytes),
+            builder: (_) => PreviewScreen(
+              imageBytes: imageBytes,
+              plantId: widget.plantId,
+              plantName: widget.plantName,
+            ),
           ),
         );
       }

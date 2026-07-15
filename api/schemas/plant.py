@@ -27,6 +27,17 @@ class CareInput(BaseModel):
 CareDetail = CareInput
 
 
+def _parse_care(care_json: dict) -> CareDetail:
+    """
+    Deserialize care_json from Postgres into a CareDetail.
+
+    Using model_validate instead of CareDetail(**care_json) so that:
+    - Unknown extra keys are ignored rather than raising TypeError
+    - A descriptive ValidationError is raised if required keys are missing
+    """
+    return CareDetail.model_validate(care_json)
+
+
 class PlantCreate(BaseModel):
     """Request body for POST /plants."""
     # min_length=1 rejects empty strings; max_length=100 matches DB column
@@ -53,7 +64,9 @@ class PlantResponse(BaseModel):
 
 
 class PlantDetail(BaseModel):
-    """Full plant data returned by GET /plants/{id}. Includes care guide."""
+    """Full plant data returned by GET /plants/{id}.
+    Includes latest scan data + scan_count (used to decide whether to show history section).
+    """
     id: UUID
     name: str
     common_name: str
@@ -64,30 +77,32 @@ class PlantDetail(BaseModel):
     care: CareDetail
     fun_fact: Optional[str] = None
     created_at: datetime
+    scan_count: int
 
     model_config = {"from_attributes": False}
 
     @classmethod
-    def from_orm(cls, plant) -> "PlantDetail":
-        # care_json is stored as a raw dict in Postgres (JSONB column).
-        # SQLAlchemy's from_attributes mode cannot automatically convert a
-        # plain dict to a nested Pydantic model, so we build it manually.
+    def from_orm(cls, plant, latest_scan, scan_count: int) -> "PlantDetail":
+        # plant has: id, name, created_at
+        # latest_scan has: all scan fields
         return cls(
             id=plant.id,
             name=plant.name,
-            common_name=plant.common_name,
-            scientific_name=plant.scientific_name,
-            confidence=plant.confidence,
-            health=plant.health,
-            health_observation=plant.health_observation,
-            care=CareDetail(**plant.care_json),
-            fun_fact=plant.fun_fact,
+            common_name=latest_scan.common_name,
+            scientific_name=latest_scan.scientific_name,
+            confidence=latest_scan.confidence,
+            health=latest_scan.health,
+            health_observation=latest_scan.health_observation,
+            care=_parse_care(latest_scan.care_json),
+            fun_fact=latest_scan.fun_fact,
             created_at=plant.created_at,
+            scan_count=scan_count,
         )
 
 
 class PlantListItem(BaseModel):
     """One item in GET /plants — summary only, no care JSON.
+    Fields sourced from the lateral join on plant_scans (latest scan per plant).
     The full care guide comes from GET /plants/{id} when the user opens detail.
     """
     id: UUID
@@ -99,4 +114,17 @@ class PlantListItem(BaseModel):
     health_observation: str
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": False}
+
+    @classmethod
+    def from_row(cls, plant, latest_scan) -> "PlantListItem":
+        return cls(
+            id=plant.id,
+            name=plant.name,
+            common_name=latest_scan.common_name,
+            scientific_name=latest_scan.scientific_name,
+            confidence=latest_scan.confidence,
+            health=latest_scan.health,
+            health_observation=latest_scan.health_observation,
+            created_at=plant.created_at,
+        )

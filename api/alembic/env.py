@@ -18,6 +18,7 @@ from db.database import Base
 import models.user          # noqa: F401
 import models.refresh_token # noqa: F401
 import models.plant         # noqa: F401
+import models.plant_scan    # noqa: F401
 
 config = context.config
 
