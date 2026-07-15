@@ -1,0 +1,385 @@
+product:
+  name: PlantIt Helper
+  tagline: Your personal plant doctor with memory
+  problem: |
+    Plant owners manage multiple plants across different locations with different
+    care needs. When something goes wrong they start from scratch every time —
+    no history, no context, no continuity. ChatGPT works but forgets everything.
+  solution: |
+    A mobile app that identifies plants from photos, saves them to a personal
+    collection organised by location, and lets you chat with an AI that
+    remembers every conversation you've had about each plant.
+
+# ─────────────────────────────────────────────
+# DATA MODEL
+# ─────────────────────────────────────────────
+
+data_model:
+
+  users:
+    id: uuid (PK)
+    email: string (unique)
+    hashed_password: string
+    created_at: timestamp
+
+  locations:
+    id: uuid (PK)
+    user_id: uuid (FK → users, null = system default)
+    zone: enum (indoors | outdoors | other)
+    name: string  # "Living Room", "Backyard", "Greenhouse"
+    is_default: boolean  # true = seeded for every user, false = user-created
+    notes:
+      - Predefined defaults are seeded on first user login
+      - Users can add unlimited custom locations
+      - Deleting a location is blocked if plants are assigned to it
+
+  plants:
+    id: uuid (PK)
+    user_id: uuid (FK → users)
+    location_id: uuid (FK → locations)
+    common_name: string        # from Claude scan e.g. "Monstera"
+    scientific_name: string    # from Claude scan e.g. "Monstera deliciosa"
+    nickname: string (optional) # user-given e.g. "Big Thai", "Leggy One"
+    photo_url: string (optional) # S3 URL — added in later story
+    care: json                 # {light, water, humidity, temperature, tips[]}
+    confidence: enum (low | medium | high)  # Claude's confidence at scan time
+    scanned_at: timestamp
+    created_at: timestamp
+    notes:
+      - Same species can appear multiple times (three Thai Constellations = 3 rows)
+      - Nickname defaults to "{common_name}" if not provided
+      - Display name = nickname if set, else common_name
+
+  conversations:
+    id: uuid (PK)
+    plant_id: uuid (FK → plants)
+    user_id: uuid (FK → users)
+    title: string (optional)   # auto-generated from first message
+    created_at: timestamp
+    updated_at: timestamp
+    notes:
+      - One plant can have many conversations over its lifetime
+      - Each conversation is a distinct thread (e.g. "yellowing leaves Aug 2025")
+
+  messages:
+    id: uuid (PK)
+    conversation_id: uuid (FK → conversations)
+    role: enum (user | assistant)
+    content: string
+    image_url: string (optional)  # for diagnosis photos sent mid-conversation
+    created_at: timestamp
+    notes:
+      - Messages are ordered by created_at
+      - Claude receives full message history for each conversation
+      - Plant context (name, care, location) prepended as system context
+
+# ─────────────────────────────────────────────
+# PREDEFINED LOCATIONS (seeded per user)
+# ─────────────────────────────────────────────
+
+default_locations:
+  indoors:
+    - Living Room
+    - Bedroom
+    - Kitchen
+    - Bathroom
+    - Office
+    - Hallway
+  outdoors:
+    - Backyard
+    - Front Yard
+    - Balcony
+    - Patio
+    - Garden Bed
+    - Greenhouse
+
+# ─────────────────────────────────────────────
+# EPICS & STORIES
+# ─────────────────────────────────────────────
+
+epics:
+
+  E1_auth:
+    title: Authentication
+    status: complete
+    stories:
+      - E1-S1: Register + Login
+      - E1-S2: Token refresh + logout
+      - E1-S3: Auth persistence (splash screen)
+      - E1-S4: Forgot / reset password
+
+  E2_scan:
+    title: Scan & Identify
+    status: in_progress
+    goal: User takes a photo, gets plant identified, saves it to their collection
+    stories:
+      E2-S1:
+        title: Camera & gallery capture
+        status: complete
+        delivers: CaptureScreen + PreviewScreen, single compressed image in memory
+
+      E2-S2:
+        title: Plant scan API endpoint
+        status: complete
+        delivers: POST /scan with Claude Opus vision, returns name + care JSON
+
+      E2-S3:
+        title: Scan result screen
+        status: next
+        description: |
+          Wire the Flutter "Scan This Plant" button on PreviewScreen to call
+          POST /scan. Display the result on a new ResultScreen showing the
+          plant identification and care information. Handle all error states
+          gracefully so the user is never left confused.
+        delivers:
+          - ResultScreen with common name, scientific name, confidence badge, care info
+          - Loading state on PreviewScreen while API call is in flight
+          - "Save this plant" button navigates to E2-S4
+          - "Scan Another" button returns to CaptureScreen (pops to root of scan stack)
+          - Error handling for all failure cases
+        scope_note: No tips, no fun fact, no chat — those are later stories
+        acceptance_criteria:
+          AC-1: Tapping "Scan This Plant" shows a loading spinner and disables the button
+          AC-2: On success, navigates to ResultScreen with plant data populated
+          AC-3: ResultScreen shows common name (large, bold) and scientific name (italic)
+          AC-4: Confidence displayed as coloured badge — high=green, medium=amber, low=red
+          AC-5: Care section shows all four fields — light, water, humidity, temperature
+          AC-6: "Save this plant" button present and navigates to SavePlantScreen (E2-S4 stub)
+          AC-7: "Scan Another" button returns user to CaptureScreen, clears preview
+          AC-8: On 422 (no plant detected), stays on PreviewScreen, shows clear error message
+          AC-9: On 401 (token expired mid-session), redirects to login screen
+          AC-10: On 413 (image too large), shows specific message about image size
+          AC-11: On network error / timeout, shows error with "Try Again" button that retries the same image
+          AC-12: On 500 (server error), shows generic error — does not expose internal detail to user
+          AC-13: Loading state cannot be tapped through — buttons disabled while request is in flight
+          AC-14: Navigating back from ResultScreen does not re-trigger the scan
+
+      E2-S4:
+        title: Save plant to collection
+        status: planned
+        description: |
+          After a successful scan, user can save the plant to their personal
+          collection. They select a location from a predefined list (or add a
+          custom one), optionally give the plant a nickname, and confirm.
+          This creates a plant record in the database and seeds default locations
+          for the user if they haven't been created yet.
+        delivers:
+          - SavePlantScreen with location picker and optional nickname field
+          - Backend POST /plants endpoint
+          - Backend GET /locations + POST /locations endpoints
+          - Default locations seeded on first save
+        acceptance_criteria:
+          AC-1: Locations shown grouped by zone (Indoors / Outdoors / Other)
+          AC-2: Predefined locations shown for every user on first use
+          AC-3: "Add custom location" option opens a sheet to enter zone + name
+          AC-4: Custom location name cannot be empty or whitespace only
+          AC-5: Custom location name cannot duplicate an existing location name (case-insensitive)
+          AC-6: Nickname field is optional — placeholder shows common name as hint
+          AC-7: Nickname max length 50 characters
+          AC-8: Save button is disabled until a location is selected
+          AC-9: On save success, navigates to plant profile screen (E3-S2 stub for now)
+          AC-10: On save failure (network error), shows error and retains all entered data
+          AC-11: Double-tapping Save does not create duplicate plant records
+          AC-12: Navigating back from SavePlantScreen does not lose scan result data
+
+      E2-S5:
+        title: Add context text at scan time
+        status: planned
+        description: |
+          Allow users to add a short text note before submitting a scan.
+          This gives Claude additional context that the photo alone cannot provide —
+          e.g. "this is a bulb I dug up, unsure if dahlia or tulip" or
+          "found this growing in shade under a oak tree".
+          The note is sent alongside the image in the POST /scan request.
+        delivers:
+          - Optional text field on PreviewScreen ("Add a note for better identification")
+          - Backend passes note as additional user message content to Claude
+        acceptance_criteria:
+          AC-1: Optional text field visible on PreviewScreen below the image
+          AC-2: Field has placeholder "Describe what you know about this plant (optional)"
+          AC-3: Max 300 characters with live character count shown
+          AC-4: Note is included in the Claude request when provided
+          AC-5: Scan works identically when no note is provided (fully optional)
+          AC-6: Keyboard does not obscure the Scan button — screen scrolls or button moves up
+          AC-7: Note is not stored in the database — it is only used for the scan request
+
+      E2-S6:
+        title: Multiple photos at scan time
+        status: planned
+        description: |
+          Allow users to capture or select up to 3 photos before submitting a scan.
+          This improves identification accuracy for complex cases — bulbs, multi-stem
+          plants, plants with distinctive flowers AND foliage. Reworks CaptureScreen
+          to support a photo tray instead of immediately navigating to PreviewScreen.
+        delivers:
+          - Reworked CaptureScreen with photo tray (1-3 images)
+          - Reworked PreviewScreen to show all captured images
+          - All images sent to Claude in a single POST /scan request
+          - Backend scan_service updated to send multiple image content blocks
+        acceptance_criteria:
+          AC-1: CaptureScreen shows a photo tray at the bottom after first photo is taken
+          AC-2: User can add up to 3 photos (camera or gallery for each)
+          AC-3: Each photo in the tray can be removed individually
+          AC-4: "Done" button appears after at least 1 photo and navigates to PreviewScreen
+          AC-5: PreviewScreen shows all photos in a horizontal scroll strip
+          AC-6: All photos are compressed before sending (same compression as E2-S1)
+          AC-7: Total payload size check — if combined images exceed 15MB, show warning
+          AC-8: Single photo flow still works exactly as before (backward compatible)
+          AC-9: Backend sends all images as separate image content blocks in one Claude message
+          AC-10: Claude prompt updated to reference "the provided images" (plural)
+
+  E3_collection:
+    title: My Plants Collection
+    status: planned
+    goal: User can view, organise, and manage their saved plants
+    stories:
+      E3-S1:
+        title: My Plants screen
+        description: |
+          The main collection view. All saved plants listed and grouped by location.
+          Entry point from the home screen after the user has saved at least one plant.
+        delivers:
+          - My Plants screen grouped by location
+          - Empty state for new users
+          - Navigation to plant profile on tap
+        acceptance_criteria:
+          AC-1: Plants grouped by location, each group has a header with location name and zone
+          AC-2: Each plant card shows nickname (or common name), scientific name, confidence badge
+          AC-3: Empty state shown when no plants saved — includes prompt to scan first plant
+          AC-4: Locations with no plants are not shown
+          AC-5: Tapping a plant navigates to its profile (E3-S2)
+          AC-6: List refreshes when navigating back from plant profile (e.g. after nickname edit)
+          AC-7: Pull to refresh fetches latest data from API
+
+      E3-S2:
+        title: Plant profile screen
+        description: |
+          Full detail view for a single saved plant. Shows everything known about it —
+          identification, care, location — and is the launch point for chat and diagnosis.
+        delivers:
+          - Full plant profile with all fields
+          - Inline nickname editing
+          - Location reassignment
+          - Entry points to chat and diagnose
+        acceptance_criteria:
+          AC-1: Shows nickname (or common name), scientific name, location, confidence badge
+          AC-2: Shows full care info — light, water, humidity, temperature
+          AC-3: Scan date shown ("Identified on 14 Jul 2025")
+          AC-4: Nickname can be edited inline — tap to edit, confirm with checkmark or keyboard done
+          AC-5: Nickname edit saves immediately via PATCH /plants/{id}
+          AC-6: Nickname field cannot be saved as empty — revert to common name if cleared
+          AC-7: "Move to different location" option opens location picker
+          AC-8: "Chat about this plant" button navigates to E4-S1
+          AC-9: "Diagnose" button navigates to E4-S2
+          AC-10: Delete plant option available (with confirmation dialog)
+          AC-11: Deleting plant also deletes all its conversations (backend cascade)
+
+      E3-S3:
+        title: Manage locations
+        description: |
+          Let users view their full location list and add custom locations.
+          Accessible from the My Plants screen and the Save Plant flow.
+        delivers:
+          - Location list grouped by zone
+          - Add custom location sheet
+          - Delete empty locations
+        acceptance_criteria:
+          AC-1: All locations shown grouped by zone (Indoors / Outdoors / Other)
+          AC-2: Each location shows plant count ("3 plants")
+          AC-3: "Add location" opens a bottom sheet with zone picker and name field
+          AC-4: Zone picker shows: Indoors, Outdoors, Other
+          AC-5: Name field cannot be empty or whitespace only
+          AC-6: Name cannot duplicate existing location (case-insensitive check)
+          AC-7: Custom locations can be deleted if they have 0 plants assigned
+          AC-8: Delete is blocked with explanation if location has plants
+          AC-9: Default predefined locations cannot be deleted
+
+  E4_chat:
+    title: Plant Chat & Diagnosis
+    status: planned
+    goal: Persistent AI conversations about specific plants with full history
+    stories:
+      E4-S1:
+        title: Per-plant chat
+        description: |
+          A conversation thread tied to a specific plant. Claude always has full
+          context about the plant (name, species, location, care info) and the
+          complete history of this conversation. User can start new conversations
+          or continue previous ones. This is the core long-term value of the app —
+          the plant doctor that remembers every visit.
+        delivers:
+          - Chat screen with message history
+          - New conversation and continue conversation flows
+          - Claude system context includes plant data
+          - Conversation list per plant
+        acceptance_criteria:
+          AC-1: Claude system context includes plant name, scientific name, location, care info
+          AC-2: Full message history shown in chronological order (oldest at top)
+          AC-3: User messages shown on right, Claude messages on left
+          AC-4: Sending a message shows it immediately (optimistic update) then waits for Claude
+          AC-5: Loading indicator shown while waiting for Claude response
+          AC-6: Conversation title auto-set to first 50 chars of first user message
+          AC-7: Plant profile shows list of past conversations with title and date
+          AC-8: Tapping a past conversation opens it with full history
+          AC-9: "New conversation" button starts a fresh thread (previous threads preserved)
+          AC-10: If Claude API fails, shows error and preserves the user message so it's not lost
+          AC-11: Empty conversation state shows prompt ("Ask anything about this plant")
+          AC-12: Messages persist across app restarts — history always available
+
+      E4-S2:
+        title: Diagnose mode
+        description: |
+          A focused conversation flow for when something is wrong with a plant.
+          Claude already knows what the plant is — the prompt is framed around
+          diagnosis not identification. User can attach photos of the problem
+          (discoloured leaves, pests, root rot) in any message. Up to 3 photos
+          per message. Saved as a conversation so the user can return weeks later
+          with updates and Claude has the full diagnostic history.
+        delivers:
+          - Diagnose conversation flow with diagnosis-focused Claude prompt
+          - Photo attachment support (up to 3 per message)
+          - Saved as a conversation on the plant profile
+        acceptance_criteria:
+          AC-1: Claude system context includes plant data AND "the user is reporting a problem"
+          AC-2: Opening message prompts "What's wrong? Describe the symptoms or attach a photo"
+          AC-3: Camera icon in message input opens photo picker (camera or gallery)
+          AC-4: Up to 3 photos can be attached to a single message
+          AC-5: Photos shown as thumbnails in the message bubble before sending
+          AC-6: Individual attached photos can be removed before sending
+          AC-7: Photos sent to Claude as image content blocks alongside message text
+          AC-8: Message can be text only, photo only, or text + photos
+          AC-9: Diagnosis conversation appears in plant profile conversation list
+          AC-10: User can return weeks later, see full history, and continue the thread
+          AC-11: If no text and no photos, send button is disabled
+          AC-12: Photo upload failure shows per-photo error — does not block sending text
+
+# ─────────────────────────────────────────────
+# API ENDPOINTS (planned)
+# ─────────────────────────────────────────────
+
+api_endpoints:
+  complete:
+    - POST /auth/register
+    - POST /auth/login
+    - POST /auth/logout
+    - GET  /auth/me
+    - POST /auth/refresh
+    - POST /auth/forgot-password
+    - POST /auth/reset-password
+    - POST /scan
+
+  planned:
+    - GET  /locations              # list user's locations (defaults + custom)
+    - POST /locations              # create custom location
+    - DELETE /locations/{id}       # delete if no plants assigned
+
+    - GET  /plants                 # list all user's plants
+    - POST /plants                 # save a scanned plant
+    - GET  /plants/{id}            # get single plant
+    - PATCH /plants/{id}           # update nickname or location
+    - DELETE /plants/{id}
+
+    - GET  /plants/{id}/conversations        # list conversations for a plant
+    - POST /plants/{id}/conversations        # start new conversation
+    - GET  /conversations/{id}/messages      # get full message history
+    - POST /conversations/{id}/messages      # send message, get Claude reply
