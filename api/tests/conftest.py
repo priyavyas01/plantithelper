@@ -10,7 +10,6 @@ os.environ.setdefault("RESEND_FROM_EMAIL", "test@example.com")
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 os.environ.setdefault("ANTHROPIC_API_KEY", "test-key")
 
-import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
@@ -22,6 +21,7 @@ from db.database import get_db, Base
 import models.user                  # noqa: F401 — registers model with Base.metadata
 import models.refresh_token         # noqa: F401
 import models.password_reset_token  # noqa: F401
+import models.plant                 # noqa: F401
 
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 

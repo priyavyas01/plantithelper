@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+import logging
 
 from router.auth import get_current_user
 from models.user import User
@@ -6,6 +7,7 @@ from schemas.scan import ScanResponse
 from services.scan_service import identify_plant
 
 router = APIRouter(prefix="/scan", tags=["scan"])
+logger = logging.getLogger(__name__)
 
 # 5MB in bytes. Checked before we do any processing.
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
@@ -21,14 +23,20 @@ async def scan_plant(
     Accepts a JPEG/PNG/HEIC image, identifies the plant using Claude Opus,
     and returns structured plant information.
     """
+    logger.info(f"POST /scan | filename={image.filename} content_type={image.content_type}")
 
     # Validate file type.
-    # content_type is set by the client and can be None or spoofed,
-    # so we treat it as a hint only. Flutter's http package doesn't always
-    # set content_type on multipart files — treat None as acceptable and
-    # let Claude handle truly invalid image data downstream.
-    allowed_types = {"image/jpeg", "image/jpg", "image/png", "image/heic", "image/heif"}
+    # content_type is a hint from the client — Flutter's http package sends
+    # image/jpeg when we set it explicitly via MediaType('image', 'jpeg').
+    # We still allow None and application/octet-stream as fallbacks so that
+    # edge cases (older clients, unusual devices) are not blocked.
+    allowed_types = {
+        "image/jpeg", "image/jpg", "image/png",
+        "image/heic", "image/heif",
+        "application/octet-stream",  # Flutter default when contentType not set
+    }
     if image.content_type and image.content_type not in allowed_types:
+        logger.warning(f"rejected content_type={image.content_type}")
         raise HTTPException(
             status_code=400,
             detail="Only JPEG, PNG, and HEIC images are supported.",

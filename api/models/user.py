@@ -17,3 +17,4 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
+    plants = relationship("Plant", back_populates="user", cascade="all, delete-orphan")
