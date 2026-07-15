@@ -24,16 +24,16 @@ class CareInput(BaseModel):
 # CareDetail is identical in shape to CareInput — both carry the same four
 # fields plus tips. We alias rather than duplicate so a field addition only
 # needs to happen once.
-def _parse_care(care_json: dict) -> "CareDetail":
+CareDetail = CareInput
+
+
+def _parse_care(care_json: dict) -> CareDetail:
     """
     Deserialize care_json from Postgres into a CareDetail.
 
     Using model_validate instead of CareDetail(**care_json) so that:
-    - Unknown extra keys are ignored (Pydantic default) rather than raising TypeError
-    - A descriptive ValidationError is raised (not TypeError) if required keys are missing
-    - Callers can catch pydantic.ValidationError specifically to surface a 500 with context
-
-    Raises pydantic.ValidationError if the stored JSON is malformed.
+    - Unknown extra keys are ignored rather than raising TypeError
+    - A descriptive ValidationError is raised if required keys are missing
     """
     return CareDetail.model_validate(care_json)
 
