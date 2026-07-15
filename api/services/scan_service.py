@@ -1,6 +1,7 @@
 import base64
 import json
 import logging
+import time
 
 from openai import AsyncOpenAI
 from fastapi import HTTPException
@@ -11,9 +12,6 @@ logger = logging.getLogger(__name__)
 
 _client = AsyncOpenAI()
 
-# The prompt tells GPT exactly what we want.
-# "Respond ONLY with valid JSON" is the key instruction — without it,
-# GPT might write "Sure! Here's the plant info: {...}" which breaks json.loads().
 _SYSTEM_PROMPT = """You are an expert botanist. Identify the plant in the image provided.
 
 Respond ONLY with valid JSON. No explanation, no markdown, no code fences. Just JSON.
@@ -42,11 +40,15 @@ If no plant is visible or the image is too blurry to identify, use this format:
 
 
 async def identify_plant(image_bytes: bytes) -> ScanResponse:
-    logger.info(f"🔍 Scan request received — image size: {len(image_bytes) / 1024:.1f}KB")
+    size_kb = len(image_bytes) / 1024
+    logger.info(f"scan started | size_kb={size_kb:.1f}")
 
+    # Convert raw bytes to base64 string for OpenAI API
     image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+    logger.debug(f"base64 encoded | original_bytes={len(image_bytes)} encoded_chars={len(image_b64)}")
 
-    logger.info("📡 Sending image to GPT-4o Vision...")
+    logger.info("openai request | model=gpt-4o detail=auto max_tokens=500")
+    t0 = time.monotonic()
     try:
         response = await _client.chat.completions.create(
             model="gpt-4o",
@@ -59,58 +61,59 @@ async def identify_plant(image_bytes: bytes) -> ScanResponse:
                             "type": "image_url",
                             "image_url": {
                                 "url": f"data:image/jpeg;base64,{image_b64}",
-                                # "auto" lets GPT decide the detail level.
-                                # "low" is cheaper but misses fine details.
-                                # "high" is more accurate but costs more tokens.
                                 "detail": "auto",
                             },
                         },
-                        {
-                            "type": "text",
-                            "text": "Identify this plant.",
-                        },
+                        {"type": "text", "text": "Identify this plant."},
                     ],
                 },
             ],
-            # max_tokens caps the response length.
-            # Our JSON response is ~300 tokens max — 500 gives comfortable headroom.
             max_tokens=500,
         )
     except Exception as e:
-        logger.error(f"❌ OpenAI API error: {e}")
+        logger.error(f"openai request failed | error={e}")
         raise HTTPException(status_code=500, detail=f"OpenAI API error: {str(e)}")
 
-    raw_text = response.choices[0].message.content
-    logger.info(f"📥 GPT response received: {raw_text[:120]}...")
+    elapsed = time.monotonic() - t0
+    usage = response.usage
+    logger.info(
+        f"openai response received | duration_s={elapsed:.2f} "
+        f"prompt_tokens={usage.prompt_tokens} "
+        f"completion_tokens={usage.completion_tokens} "
+        f"total_tokens={usage.total_tokens}"
+    )
 
+    raw_text = response.choices[0].message.content
+    logger.debug(f"raw gpt output | content={raw_text}")
+
+    # Parse JSON — GPT should return clean JSON per our prompt instructions
     try:
         data = json.loads(raw_text)
-    except (ValueError, TypeError):
-        raise HTTPException(
-            status_code=500,
-            detail="GPT returned an unexpected response format.",
-        )
+        logger.info(f"json parsed | identified={data.get('identified')}")
+    except (ValueError, TypeError) as e:
+        logger.error(f"json parse failed | error={e} raw_preview={raw_text[:200]}")
+        raise HTTPException(status_code=500, detail="GPT returned an unexpected response format.")
 
     if not data.get("identified", False):
         reason = data.get("reason", "No plant detected in the image.")
-        logger.warning(f"🌿 Plant not identified: {reason}")
+        logger.warning(f"plant not identified | reason={reason}")
         raise HTTPException(status_code=422, detail=reason)
 
-    logger.info(f"✅ Plant identified: {data.get('common_name')} ({data.get('confidence')} confidence)")
-
-    # Step 6: build and return the ScanResponse.
-    # Pydantic validates the fields here — if GPT returned a confidence value
-    # we didn't expect (e.g. "very high"), Pydantic raises a ValidationError.
+    # Build typed response — Pydantic validates all fields here
     try:
-        return ScanResponse(
+        result = ScanResponse(
             common_name=data["common_name"],
             scientific_name=data["scientific_name"],
             confidence=data["confidence"],
-            care=CareInfo(**data["care"]),  # ** unpacks the dict into keyword args
+            care=CareInfo(**data["care"]),
             fun_fact=data["fun_fact"],
         )
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Could not parse plant data: {str(e)}",
+        logger.info(
+            f"scan complete | name={result.common_name} "
+            f"scientific={result.scientific_name} "
+            f"confidence={result.confidence}"
         )
+        return result
+    except Exception as e:
+        logger.error(f"response build failed | error={e} raw_data={data}")
+        raise HTTPException(status_code=500, detail=f"Could not parse plant data: {str(e)}")

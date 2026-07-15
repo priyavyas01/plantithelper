@@ -86,7 +86,7 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
     db.add(refresh)
 
     await db.commit()
-    logger.info(f"✅ New user registered: {body.email}")
+    logger.info(f"register success email={body.email}")
 
     return TokenResponse(
         access_token=create_access_token(str(user.id)),
@@ -106,14 +106,14 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
     # If we said "email not found" vs "wrong password", an attacker could
     # enumerate which emails are registered in your system.
     if not user or not verify_password(body.password, user.hashed_password):
-        logger.warning(f"⚠️  Failed login attempt for: {body.email}")
+        logger.warning(f"login failed email={body.email}")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     raw_token, token_hash, expires_at = create_refresh_token()
     refresh = RefreshToken(user_id=user.id, token_hash=token_hash, expires_at=expires_at)
     db.add(refresh)
     await db.commit()
-    logger.info(f"🔑 Login successful: {body.email}")
+    logger.info(f"login success email={body.email}")
 
     return TokenResponse(
         access_token=create_access_token(str(user.id)),

@@ -25,11 +25,11 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("🌱 PlantIt Helper API starting up")
+    logger.info("startup complete")
     await init_db()
-    logger.info("✅ Database ready")
+    logger.info("database ready")
     yield
-    logger.info("🛑 PlantIt Helper API shutting down")
+    logger.info("shutdown")
 
 
 app = FastAPI(title="PlantIt Helper API", version="0.1.0", lifespan=lifespan)
