@@ -13,13 +13,20 @@ class CareInfo(BaseModel):
     tips: list[str]
 
 
+# HealthStatus constrains the four values Claude is allowed to return.
+# "unknown" is the safe fallback — used when Claude can't assess health
+# from the image (e.g. a bare bulb, a blurry photo, or just soil).
+HealthStatus = Literal["healthy", "needs_attention", "concerning", "unknown"]
+
+
 # ScanResponse is what we return to the Flutter app on success (HTTP 200).
-# Literal["low", "medium", "high"] means Pydantic will reject any other string —
-# it's like an enum but simpler.
-# fun_fact is optional — Claude doesn't always include it.
+# confidence is kept for debugging/analytics but not shown in the UI.
+# health + health_observation are the user-facing signals.
 class ScanResponse(BaseModel):
     common_name: str
     scientific_name: str
     confidence: Literal["low", "medium", "high"]
+    health: HealthStatus
+    health_observation: str
     care: CareInfo
     fun_fact: Optional[str] = None

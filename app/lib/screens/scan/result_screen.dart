@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/scan_models.dart';
 import '../../services/plant_service.dart';
-import '../../widgets/confidence_badge.dart';
+import '../../widgets/health_badge.dart';
 import '../../widgets/care_grid.dart';
 import '../../theme/app_theme.dart';
 
@@ -43,7 +43,7 @@ class ResultScreen extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Plant header: name, scientific name, confidence badge
+// Plant header: name, scientific name, health badge + observation
 // ---------------------------------------------------------------------------
 
 class _PlantHeader extends StatelessWidget {
@@ -72,7 +72,17 @@ class _PlantHeader extends StatelessWidget {
               ),
         ),
         const SizedBox(height: 12),
-        ConfidenceBadge(confidence: result.confidence),
+        HealthBadge(health: result.health),
+        if (result.healthObservation.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(
+            result.healthObservation,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Colors.grey[700],
+                  fontStyle: FontStyle.italic,
+                ),
+          ),
+        ],
       ],
     );
   }
@@ -221,6 +231,8 @@ class _SavePlantSheetState extends State<_SavePlantSheet> {
       commonName: widget.result.commonName,
       scientificName: widget.result.scientificName,
       confidence: widget.result.confidence,
+      health: widget.result.health,
+      healthObservation: widget.result.healthObservation,
       care: widget.result.care,
       funFact: widget.result.funFact,
     );

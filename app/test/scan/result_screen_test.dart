@@ -3,10 +3,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:plant_it_helper/models/scan_models.dart';
 import 'package:plant_it_helper/screens/scan/result_screen.dart';
 
-ScanResult _mockResult({String confidence = 'high'}) => ScanResult(
+ScanResult _mockResult({String confidence = 'high', String health = 'healthy'}) => ScanResult(
       commonName: 'Monstera',
       scientificName: 'Monstera deliciosa',
       confidence: confidence,
+      health: health,
+      healthObservation: 'Leaves look vibrant and full.',
       care: const CareInfo(
         light: 'Bright indirect light',
         water: 'Once a week',
@@ -27,23 +29,28 @@ void main() {
       expect(find.text('Monstera deliciosa'), findsOneWidget);
     });
 
-    testWidgets('shows High confidence badge', (tester) async {
+    testWidgets('shows Healthy health badge', (tester) async {
+      await tester.pumpWidget(_wrap(ResultScreen(result: _mockResult(health: 'healthy'))));
+      expect(find.text('Healthy'), findsOneWidget);
+    });
+
+    testWidgets('shows Needs Attention health badge', (tester) async {
+      await tester.pumpWidget(
+        _wrap(ResultScreen(result: _mockResult(health: 'needs_attention'))),
+      );
+      expect(find.text('Needs Attention'), findsOneWidget);
+    });
+
+    testWidgets('shows Concerning health badge', (tester) async {
+      await tester.pumpWidget(
+        _wrap(ResultScreen(result: _mockResult(health: 'concerning'))),
+      );
+      expect(find.text('Concerning'), findsOneWidget);
+    });
+
+    testWidgets('shows health observation text', (tester) async {
       await tester.pumpWidget(_wrap(ResultScreen(result: _mockResult())));
-      expect(find.text('High confidence'), findsOneWidget);
-    });
-
-    testWidgets('shows Medium confidence badge', (tester) async {
-      await tester.pumpWidget(
-        _wrap(ResultScreen(result: _mockResult(confidence: 'medium'))),
-      );
-      expect(find.text('Medium confidence'), findsOneWidget);
-    });
-
-    testWidgets('shows Low confidence badge', (tester) async {
-      await tester.pumpWidget(
-        _wrap(ResultScreen(result: _mockResult(confidence: 'low'))),
-      );
-      expect(find.text('Low confidence'), findsOneWidget);
+      expect(find.text('Leaves look vibrant and full.'), findsOneWidget);
     });
 
     testWidgets('shows all four care card labels', (tester) async {

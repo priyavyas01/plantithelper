@@ -14,6 +14,8 @@ final _mockResult = ScanResult(
   commonName: 'Monstera',
   scientificName: 'Monstera deliciosa',
   confidence: 'high',
+  health: 'healthy',
+  healthObservation: 'Leaves look vibrant and full.',
   care: CareInfo(
     light: 'Bright indirect light',
     water: 'Water when dry',

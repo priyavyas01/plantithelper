@@ -5,6 +5,7 @@ import '../../services/token_service.dart';
 import '../scan/capture_screen.dart';
 import 'plant_detail_screen.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/health_badge.dart';
 
 class MyPlantsScreen extends StatefulWidget {
   // Injectable for tests. In production this is null and _loadPlants falls
@@ -398,25 +399,8 @@ class _BottomRow extends StatelessWidget {
           'Saved $savedAgo',
           style: TextStyle(fontSize: 12, color: Colors.grey[500]),
         ),
-        if (plant.confidence == 'low') ...[
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: Colors.orange.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.orange),
-            ),
-            child: const Text(
-              'Uncertain ID',
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.orange,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
+        const Spacer(),
+        HealthBadge(health: plant.health),
       ],
     );
   }

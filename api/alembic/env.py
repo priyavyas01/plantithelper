@@ -17,6 +17,7 @@ from db.database import Base
 # won't know the table exists and won't include it in migrations.
 import models.user          # noqa: F401
 import models.refresh_token # noqa: F401
+import models.plant         # noqa: F401
 
 config = context.config
 

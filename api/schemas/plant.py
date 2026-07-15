@@ -3,10 +3,13 @@ from typing import Literal, Optional
 from datetime import datetime
 from uuid import UUID
 
-# confidence is constrained to three values Claude can return.
-# Pydantic will reject any other string at parse time so bad data
-# never reaches the DB or the UI.
+# confidence is kept in the DB and schema for debugging/analytics but
+# is no longer shown in the UI. HealthStatus is what users see.
 ConfidenceLevel = Literal["high", "medium", "low"]
+
+# HealthStatus mirrors the Literal in scan.py — duplicated intentionally so
+# each schema module is self-contained and doesn't create a circular import.
+HealthStatus = Literal["healthy", "needs_attention", "concerning", "unknown"]
 
 
 class CareInput(BaseModel):
@@ -31,6 +34,11 @@ class PlantCreate(BaseModel):
     common_name: str
     scientific_name: str
     confidence: ConfidenceLevel
+    health: HealthStatus
+    # max_length=300 matches the truncation applied in scan_service.py.
+    # Enforcing it here means a rogue client sending a huge observation on
+    # POST /plants still gets a 422, not a silent DB bloat.
+    health_observation: str = Field(..., max_length=300)
     care: CareInput
     fun_fact: Optional[str] = None
 
@@ -51,6 +59,8 @@ class PlantDetail(BaseModel):
     common_name: str
     scientific_name: str
     confidence: ConfidenceLevel
+    health: HealthStatus
+    health_observation: str
     care: CareDetail
     fun_fact: Optional[str] = None
     created_at: datetime
@@ -68,6 +78,8 @@ class PlantDetail(BaseModel):
             common_name=plant.common_name,
             scientific_name=plant.scientific_name,
             confidence=plant.confidence,
+            health=plant.health,
+            health_observation=plant.health_observation,
             care=CareDetail(**plant.care_json),
             fun_fact=plant.fun_fact,
             created_at=plant.created_at,
@@ -83,6 +95,8 @@ class PlantListItem(BaseModel):
     common_name: str
     scientific_name: str
     confidence: ConfidenceLevel
+    health: HealthStatus
+    health_observation: str
     created_at: datetime
 
     model_config = {"from_attributes": True}
