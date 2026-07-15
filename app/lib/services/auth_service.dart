@@ -4,8 +4,13 @@ import 'package:http/http.dart' as http;
 import '../models/auth_models.dart';
 
 class AuthService {
-  // Change to your machine's IP if testing on a physical device
-  static const String _baseUrl = 'http://localhost:8000';
+  // On a physical device, localhost means the phone itself — not your laptop.
+  // Use your laptop's WiFi IP (run `ipconfig getifaddr en0` on Mac) when
+  // testing on a real device. On simulators, localhost works fine.
+  static const String _baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://localhost:8000',
+  );
 
   // Swappable in tests via setHttpClient() — production code never touches this
   static http.Client _client = http.Client();
