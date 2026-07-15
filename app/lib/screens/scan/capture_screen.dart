@@ -57,8 +57,8 @@ class _CaptureScreenState extends State<CaptureScreen> {
         format: CompressFormat.jpeg,
       );
 
-      // If compression somehow returns null (very rare), fall back to original bytes
-      final imageBytes = compressed ?? bytes;
+      // Compressed result — always non-null with flutter_image_compress >= 1.0.
+      final imageBytes = compressed;
 
       if (mounted) {
         // Navigate to preview screen, passing the compressed bytes.

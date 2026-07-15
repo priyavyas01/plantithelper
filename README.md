@@ -1,110 +1,245 @@
-# 🌿 PlantIt Helper
+# PlantIt Helper
 
-A mobile app to help you track and care for your plants.
+A mobile app to identify plants from photos, get personalised care guides, and track your collection over time.
 
-Built with **Flutter** (mobile) + **FastAPI** (backend) + **PostgreSQL** (database).
+Built by Priya Vyas as a full-stack learning project.
 
----
-
-## Project Structure
-
-```
-plantithelper/
-├── api/        # FastAPI backend
-└── app/        # Flutter mobile app
-```
+**Stack:** Flutter (iOS/Android) — FastAPI — PostgreSQL — Claude AI (Anthropic)
 
 ---
 
-## Backend Setup (`api/`)
+## Architecture
 
-### Prerequisites
+```
+                Flutter app (iOS / Android)
+                         |
+                   HTTPS + JWT
+                         |
+                  FastAPI backend
+                  /      |      \
+           Postgres   Anthropic  Resend
+           (data)     (Claude AI) (email)
+```
 
-- Python 3.9+
-- PostgreSQL running locally
+The backend is a single FastAPI process. Flutter talks to it over HTTP using a JWT
+access token (15 min) and a rotating refresh token (30 days). No data is stored on
+device beyond the token pair in secure storage.
 
-### 1. Create and activate a virtual environment
+---
+
+## Request flow — plant scan
+
+```
+User taps "Scan This Plant"
+        |
+        | POST /scan  (multipart image)
+        v
+FastAPI validates image type + size
+        |
+        v
+image bytes → base64 → Anthropic Claude Opus
+        |
+        v
+Claude returns JSON: name, care guide, confidence, health
+        |
+        v
+FastAPI validates + returns ScanResponse
+        |
+        v
+Flutter shows ResultScreen (name, care grid, save button)
+        |
+        | POST /plants  (on save)
+        v
+Plant stored in Postgres → collection updated
+```
+
+---
+
+## Auth flow
+
+```
+Register / Login
+        |
+        v
+   access_token (15 min JWT)    <-- stored in memory
+   refresh_token (30 day hash)  <-- stored in secure storage
+        |
+        | access token expires
+        v
+POST /auth/refresh
+   old refresh token → revoked
+   new refresh token → issued   (token rotation)
+   new access token → returned
+        |
+        | both tokens expired / invalid
+        v
+   clear secure storage → redirect to login
+```
+
+Token rotation means a stolen refresh token can only be used once. If an attacker
+uses it first, the real user's next refresh fails and they are forced to log back in.
+
+---
+
+## Project structure
+
+```
+plantit-helper/
+├── api/                  FastAPI backend
+│   ├── models/           SQLAlchemy ORM models
+│   ├── schemas/          Pydantic request/response schemas
+│   ├── router/           Route handlers (auth, scan, plants)
+│   ├── services/         Business logic (scan, auth, email)
+│   ├── db/               Database connection + init
+│   ├── alembic/          Migration scripts
+│   └── tests/            pytest test suite
+│
+└── app/                  Flutter mobile app
+    └── lib/
+        ├── config/       AppConfig (base URL)
+        ├── models/       Dart data classes (fromJson/toJson)
+        ├── services/     HTTP service layer (AuthService, PlantService, ScanService)
+        ├── screens/
+        │   ├── auth/     Login, Register, ForgotPassword, ResetPassword
+        │   ├── scan/     CaptureScreen, PreviewScreen, ResultScreen
+        │   ├── plants/   MyPlantsScreen
+        │   └── home/     HomeScreen (shell)
+        └── test/         Widget and unit tests
+```
+
+---
+
+## Database schema
+
+```
+users
+  id               UUID PK
+  email            VARCHAR unique
+  hashed_password  VARCHAR
+  created_at       TIMESTAMPTZ
+
+refresh_tokens
+  id               UUID PK
+  user_id          UUID FK → users
+  token_hash       VARCHAR   (SHA-256 of the raw token)
+  expires_at       TIMESTAMPTZ
+  revoked          BOOLEAN
+
+password_reset_tokens
+  id               UUID PK
+  user_id          UUID FK → users
+  code_hash        VARCHAR   (SHA-256 of the 6-digit code)
+  expires_at       TIMESTAMPTZ
+  used             BOOLEAN
+
+plants
+  id               UUID PK
+  user_id          UUID FK → users
+  name             VARCHAR   (user's display name)
+  common_name      VARCHAR   (from Claude)
+  scientific_name  VARCHAR
+  confidence       VARCHAR   (high / medium / low)
+  care_json        JSONB
+  fun_fact         TEXT nullable
+  created_at       TIMESTAMPTZ
+```
+
+---
+
+## API endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/auth/register` | — | Create account, returns token pair |
+| POST | `/auth/login` | — | Login, returns token pair |
+| POST | `/auth/refresh` | — | Rotate refresh token |
+| POST | `/auth/logout` | — | Revoke refresh token |
+| GET | `/auth/me` | JWT | Get current user |
+| POST | `/auth/forgot-password` | — | Send 6-digit reset code by email |
+| POST | `/auth/reset-password` | — | Reset password with code |
+| POST | `/scan` | JWT | Identify a plant from an image |
+| POST | `/plants` | JWT | Save plant to collection |
+| GET | `/plants` | JWT | List saved plants (newest first) |
+
+---
+
+## Feature status
+
+| Feature | Status |
+|---------|--------|
+| Registration and login | Done |
+| Token refresh and server-side logout | Done |
+| Password reset by email | Done |
+| Auth persistence (auto-login, silent refresh) | Done |
+| Camera and gallery capture | Done |
+| Plant identification via Claude AI | Done |
+| Care guide (light, water, humidity, temperature) | Done |
+| Save plant to collection | Done |
+| My Plants collection screen | Done |
+| Plant detail view | Planned (E4) |
+| Chat with Claude about a specific plant | Planned (E5) |
+| Care schedule and reminders | Planned (E6) |
+| Plant journal notes | Planned (E7) |
+| Plant health tracking | Planned (E8) |
+
+---
+
+## Backend setup
+
+**Prerequisites:** Python 3.9+, PostgreSQL running locally
 
 ```bash
 cd api
 python3 -m venv venv
-source venv/bin/activate        # Mac/Linux
-# venv\Scripts\activate         # Windows
-```
-
-### 2. Install dependencies
-
-```bash
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. Set up environment variables
+Copy the example env file and fill in the values:
 
 ```bash
 cp .env.example .env
 ```
 
-Open `.env` and fill in:
-
 | Variable | Description |
-|---|---|
-| `SECRET_KEY` | Random secret — run `python3 -c "import secrets; print(secrets.token_hex(32))"` |
-| `DATABASE_URL` | e.g. `postgresql+asyncpg://YOUR_MAC_USERNAME@localhost:5432/plantit` |
-| `DATABASE_URL_SYNC` | Same but `postgresql+psycopg2://...` |
-| `RESEND_API_KEY` | Get a free key at [resend.com](https://resend.com) |
-| `RESEND_FROM_EMAIL` | `PlantIt Helper <onboarding@resend.dev>` (works without a custom domain) |
+|----------|-------------|
+| `SECRET_KEY` | Run `python3 -c "import secrets; print(secrets.token_hex(32))"` |
+| `DATABASE_URL` | `postgresql+asyncpg://YOUR_USERNAME@localhost:5432/plantit` |
+| `DATABASE_URL_SYNC` | `postgresql+psycopg2://YOUR_USERNAME@localhost:5432/plantit` |
+| `ANTHROPIC_API_KEY` | From [console.anthropic.com](https://console.anthropic.com) |
+| `RESEND_API_KEY` | From [resend.com](https://resend.com) (free tier works) |
+| `RESEND_FROM_EMAIL` | `PlantIt Helper <onboarding@resend.dev>` |
 
-> **Note on DATABASE_URL:** On Mac, PostgreSQL uses your system username as the default role. Run `whoami` to find it.
-
-### 4. Create the database
+On Mac, PostgreSQL uses your system username as the default role. Run `whoami` to find it.
 
 ```bash
 psql postgres -c "CREATE DATABASE plantit;"
-```
-
-### 5. Run migrations
-
-```bash
 alembic upgrade head
-```
-
-### 6. Start the server
-
-```bash
 uvicorn main:app --reload
 ```
 
-API is now running at **http://127.0.0.1:8000**
-
-Interactive docs: **http://127.0.0.1:8000/docs**
+API runs at `http://127.0.0.1:8000` — interactive docs at `http://127.0.0.1:8000/docs`.
 
 ---
 
-## Flutter App Setup (`app/`)
+## Flutter setup
 
-### Prerequisites
-
-- Flutter SDK ([install guide](https://docs.flutter.dev/get-started/install))
-- iOS Simulator or Android Emulator
-
-### 1. Install dependencies
+**Prerequisites:** Flutter SDK ([install guide](https://docs.flutter.dev/get-started/install))
 
 ```bash
 cd app
 flutter pub get
 ```
 
-### 2. Configure the API base URL
-
-Open `app/lib/config/app_config.dart` and update `apiBaseUrl`:
+Open `app/lib/config/app_config.dart` and set `baseUrl`:
 
 ```dart
-static const String apiBaseUrl = 'http://localhost:8000';
+// Simulator
+static const String baseUrl = 'http://localhost:8000';
+
+// Physical device — find your Mac's IP with: ipconfig getifaddr en0
+static const String baseUrl = 'http://192.168.1.x:8000';
 ```
-
-> If running on a **physical device**, replace `localhost` with your Mac's local IP (e.g. `192.168.1.x`). Find it with `ipconfig getifaddr en0`.
-
-### 3. Run the app
 
 ```bash
 flutter run
@@ -112,54 +247,18 @@ flutter run
 
 ---
 
-## Features
+## Running tests
 
-- [x] User registration & login (JWT auth)
-- [x] Token refresh & server-side logout
-- [x] Password reset via email code
-- [x] Auth persistence — auto-login on app launch, silent token refresh
-- [x] Plant identification — photograph a plant, Claude AI identifies it with care guide
-- [x] Save identified plants to your personal collection
-- [ ] My Plants collection screen
-- [ ] Plant detail view
-- [ ] Chat with Claude about a saved plant
-- [ ] Care reminders
+**Backend:**
+```bash
+cd api
+source venv/bin/activate
+pytest tests/ -v
+```
 
----
+**Flutter:**
+```bash
+cd app
+flutter test
+```
 
-## API Endpoints
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| POST | `/auth/register` | — | Create account |
-| POST | `/auth/login` | — | Login, get JWT pair |
-| POST | `/auth/refresh` | — | Rotate refresh token |
-| POST | `/auth/logout` | — | Revoke refresh token |
-| GET | `/auth/me` | ✅ | Get current user |
-| POST | `/auth/forgot-password` | — | Send reset code via email |
-| POST | `/auth/reset-password` | — | Reset password with code |
-| POST | `/scan` | ✅ | Identify a plant from an image |
-| POST | `/plants` | ✅ | Save a plant to collection |
-
----
-
-## Database Schema
-
-| Table | Key columns |
-|---|---|
-| `users` | id, email, hashed_password, created_at |
-| `refresh_tokens` | id, user_id, token_hash, expires_at, revoked |
-| `password_reset_tokens` | id, user_id, code_hash, expires_at, used |
-| `plants` | id, user_id, name, common_name, scientific_name, confidence, care_json, fun_fact, created_at |
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Mobile | Flutter |
-| Backend | FastAPI + SQLAlchemy (async) |
-| Database | PostgreSQL + Alembic |
-| Auth | JWT (access) + rotating refresh tokens |
-| Email | Resend |

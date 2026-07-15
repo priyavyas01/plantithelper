@@ -12,7 +12,52 @@ class PlantSaveException implements Exception {
   const PlantSaveException(this.message, {this.statusCode});
 }
 
+/// Thrown when a plants API call fails unexpectedly.
+class PlantFetchException implements Exception {
+  final String message;
+  final int? statusCode;
+  const PlantFetchException(this.message, {this.statusCode});
+}
+
 class PlantService {
+  /// GET /plants — returns the current user's saved plants, newest first.
+  ///
+  /// Throws [PlantFetchException] on any non-200 response.
+  static Future<List<PlantListItem>> getPlants() async {
+    final token = await TokenService.getAccessToken();
+    if (token == null) {
+      debugPrint('[PlantService] ERROR no access token');
+      throw const PlantFetchException('Not authenticated', statusCode: 401);
+    }
+
+    final uri = Uri.parse('${AppConfig.baseUrl}/plants');
+    debugPrint('[PlantService] GET /plants');
+
+    final response = await http
+        .get(uri, headers: {'Authorization': 'Bearer $token'})
+        .timeout(const Duration(seconds: 15));
+
+    debugPrint('[PlantService] GET /plants status=${response.statusCode}');
+
+    if (response.statusCode == 200) {
+      final list = jsonDecode(response.body) as List<dynamic>;
+      final plants = list
+          .map((e) => PlantListItem.fromJson(e as Map<String, dynamic>))
+          .toList();
+      debugPrint('[PlantService] loaded ${plants.length} plants');
+      return plants;
+    }
+
+    if (response.statusCode == 401) {
+      throw const PlantFetchException('Session expired.', statusCode: 401);
+    }
+
+    throw PlantFetchException(
+      'Could not load plants.',
+      statusCode: response.statusCode,
+    );
+  }
+
   /// POST /plants — saves the scanned plant to the user's collection.
   ///
   /// Throws [PlantSaveException] on any non-201 response.
