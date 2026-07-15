@@ -31,13 +31,13 @@
 | E1 | Foundation & Auth | 3 | 3 |
 | E2 | Plant Scan & Identification | 3 | 3 |
 | E3 | Save & My Plants Collection | 3 | 2 |
-| E4 | Plant Detail & Care Info | 3 | 0 |
+| E4 | Plant Detail & Care Info | 3 | 2 |
 | E5 | Chat with Your Plant | 2 | 0 |
 | E6 | Care Schedule & Reminders | 2 | 0 |
 | E7 | Plant Journal | 1 | 0 |
 | E8 | Plant Health Tracking | 2 | 0 |
 
-**Total: 19 stories — 8 done**
+**Total: 19 stories — 10 done**
 
 ---
 
@@ -212,7 +212,7 @@ created_at  TIMESTAMPTZ
 - [ ] Plants shown as cards: plant name, scientific name, confidence badge, saved date
 - [ ] Empty state: illustration + "You have no plants yet. Scan your first one!" + scan button
 - [ ] FAB (green, camera icon) → navigates to CaptureScreen
-- [ ] Tap plant card → navigates to PlantDetailScreen (E4-S1)
+- [x] Tap plant card → navigates to PlantDetailScreen (E4-S1)
 - [ ] Pull-to-refresh reloads list
 - [ ] Loading skeleton shown while fetching
 - [ ] HomeScreen updated to show MyPlantsScreen instead of placeholder
@@ -279,22 +279,24 @@ Persistence across restarts is a future improvement using shared_preferences.
 
 ## E4 — Plant Detail & Care Info
 
-### E4-S1: Plant Detail Screen [not started]
+### E4-S1: Plant Detail Screen [done]
+**Completed:** 2026-07-15
+
 **Goal:** Full scrollable screen for a saved plant showing all care info and a re-scan option.
 
 **User Story:**
 > As a user, I want to tap a plant in my collection and see all its care details so I know exactly how to look after it.
 
 **Acceptance Criteria:**
-- [ ] Header: plant name (user's custom name) + scientific name
-- [ ] Confidence badge from original scan
-- [ ] Full 2x2 care grid (light, water, humidity, temperature) — same style as ResultScreen
-- [ ] Tips section: bulleted list from Claude
-- [ ] Fun fact shown if present (hidden if null)
-- [ ] Saved date shown: "Saved 3 days ago"
+- [x] Header: plant name (user's custom name) + scientific name
+- [x] Confidence badge from original scan
+- [x] Full 2x2 care grid (light, water, humidity, temperature) — same style as ResultScreen
+- [x] Tips section: bulleted list from Claude
+- [x] Fun fact shown if present (hidden if null)
+- [x] Saved date shown: "Saved 3 days ago"
 - [ ] "Scan Again" button → CaptureScreen (replaces scan data on save — E4-S2)
-- [ ] "Delete Plant" option in app bar menu → confirm dialog → DELETE /plants/{id} → back to collection
-- [ ] `GET /plants/{id}` endpoint returns full plant data
+- [x] "Delete Plant" option in app bar menu → confirm dialog → DELETE /plants/{id} → back to collection
+- [x] `GET /plants/{id}` endpoint returns full plant data
 
 **API: GET /plants/{id}**
 Response (200): full plant object including care_json
@@ -322,7 +324,8 @@ Response (204): no body
 
 ---
 
-### E4-BUG-001: No way back to My Plants from ResultScreen [not started]
+### E4-BUG-001: No way back to My Plants from ResultScreen [done]
+**Completed:** 2026-07-15
 **Fix alongside E4-S1** — adding the detail screen makes this worth fixing.
 Without a working detail screen, sending the user to My Plants is only half useful.
 
@@ -341,10 +344,10 @@ Navigator.popUntil(ModalRoute.withName('/home')), clearing the entire scan
 stack in one tap. Keep "Scan Another Plant" as-is for users who want to scan again.
 
 **Acceptance Criteria:**
-- [ ] "Done" button visible on ResultScreen after scan completes
-- [ ] Tapping "Done" lands on MyPlantsScreen, scan stack fully cleared
-- [ ] "Scan Another Plant" still works as before
-- [ ] If plant was saved before tapping "Done", it appears in the list immediately
+- [x] "Done" button visible on ResultScreen after scan completes
+- [x] Tapping "Done" lands on MyPlantsScreen, scan stack fully cleared
+- [x] "Scan Another Plant" still works as before
+- [x] If plant was saved before tapping "Done", it appears in the list immediately
 
 
 ### E4-S2: Re-scan a Plant [not started]

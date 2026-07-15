@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../services/token_service.dart';
 import '../../models/auth_models.dart';
+import '../theme/app_theme.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -74,14 +75,14 @@ class _SplashScreenState extends State<SplashScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.eco, size: 72, color: Color(0xFF4CAF50)),
+            Icon(Icons.eco, size: 72, color: AppTheme.green),
             SizedBox(height: 16),
             Text(
               'PlantIt Helper',
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 32),
-            CircularProgressIndicator(color: Color(0xFF4CAF50)),
+            CircularProgressIndicator(color: AppTheme.green),
           ],
         ),
       ),

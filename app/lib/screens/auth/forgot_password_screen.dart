@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../models/auth_models.dart';
 import 'reset_password_screen.dart';
+import '../../theme/app_theme.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -65,7 +66,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Icon(Icons.lock_reset, size: 56, color: Color(0xFF4CAF50)),
+          const Icon(Icons.lock_reset, size: 56, color: AppTheme.green),
           const SizedBox(height: 12),
           Text(
             'Forgot Password?',
@@ -124,7 +125,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           FilledButton(
             onPressed: _isLoading ? null : _submit,
             style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF4CAF50),
+              backgroundColor: AppTheme.green,
               padding: const EdgeInsets.symmetric(vertical: 14),
             ),
             child: _isLoading
@@ -146,7 +147,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Icon(Icons.mark_email_read_outlined,
-            size: 64, color: Color(0xFF4CAF50)),
+            size: 64, color: AppTheme.green),
         const SizedBox(height: 16),
         Text(
           'Check your email',
@@ -174,7 +175,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             ),
           ),
           style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFF4CAF50),
+            backgroundColor: AppTheme.green,
             padding: const EdgeInsets.symmetric(vertical: 14),
           ),
           child: const Text('Enter Code', style: TextStyle(fontSize: 16)),

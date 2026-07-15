@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'screens/splash_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home/home_screen.dart';
+import 'theme/app_theme.dart';
 
 void main() {
   runApp(const PlantItApp());
@@ -16,7 +17,7 @@ class PlantItApp extends StatelessWidget {
       title: 'PlantIt Helper',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF4CAF50)),
+        colorScheme: ColorScheme.fromSeed(seedColor: AppTheme.green),
         useMaterial3: true,
         inputDecorationTheme: const InputDecorationTheme(
           border: OutlineInputBorder(),

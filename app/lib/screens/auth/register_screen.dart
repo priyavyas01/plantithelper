@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../models/auth_models.dart';
 import '../../services/auth_service.dart';
 import '../../services/token_service.dart';
+import '../../theme/app_theme.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -190,7 +191,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   FilledButton(
                     onPressed: _isLoading ? null : _submit,
                     style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF4CAF50),
+                      backgroundColor: AppTheme.green,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                     child: _isLoading
@@ -218,7 +219,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         child: const Text(
                           'Sign In',
                           style: TextStyle(
-                            color: Color(0xFF4CAF50),
+                            color: AppTheme.green,
                             fontWeight: FontWeight.w600,
                           ),
                         ),

@@ -1,5 +1,5 @@
 """
-Tests for POST /plants and GET /plants
+Tests for POST /plants, GET /plants, GET /plants/{id}, DELETE /plants/{id}
 
 Never calls the real DB outside of the in-memory SQLite fixture.
 
@@ -16,6 +16,16 @@ Never calls the real DB outside of the in-memory SQLite fixture.
   8. Returns empty list (not 404) when user has no plants
   9. SECURITY: does not return another user's plants
   10. Returns 401 without auth
+
+  GET /plants/{id}:
+  11. Returns full plant data including care fields
+  12. Returns 404 for a plant that belongs to another user
+  13. Returns 401 without auth
+
+  DELETE /plants/{id}:
+  14. Deletes plant and returns 204; plant gone from GET /plants
+  15. Returns 404 for another user's plant
+  16. Returns 401 without auth
 """
 import pytest
 from httpx import AsyncClient
@@ -140,4 +150,123 @@ async def test_list_plants_only_returns_own_plants(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_list_plants_requires_auth(client: AsyncClient):
     resp = await client.get("/plants")
+    assert resp.status_code == 401
+
+
+# --- GET /plants/{id} ---
+
+@pytest.mark.asyncio
+async def test_get_plant_returns_full_detail(client: AsyncClient):
+    """GET /plants/{id} returns full data including care fields."""
+    token = await register_and_login(client, "detail1@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    save_resp = await client.post("/plants", json=VALID_PLANT, headers=headers)
+    plant_id = save_resp.json()["id"]
+
+    resp = await client.get(f"/plants/{plant_id}", headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["name"] == "My Monstera"
+    assert data["scientific_name"] == "Monstera deliciosa"
+    assert data["confidence"] == "high"
+    # care fields must be present — this is what distinguishes detail from list
+    assert data["care"]["light"] == "Bright indirect light"
+    assert data["care"]["water"] == "Water when top inch of soil is dry"
+    assert isinstance(data["care"]["tips"], list)
+    assert data["fun_fact"] == "Monstera leaves develop holes as they mature."
+
+
+@pytest.mark.asyncio
+async def test_get_plant_returns_404_for_another_users_plant(client: AsyncClient):
+    """SECURITY: User B cannot fetch User A's plant by ID."""
+    token_a = await register_and_login(client, "detail2a@example.com")
+    token_b = await register_and_login(client, "detail2b@example.com")
+
+    save_resp = await client.post(
+        "/plants", json=VALID_PLANT,
+        headers={"Authorization": f"Bearer {token_a}"}
+    )
+    plant_id = save_resp.json()["id"]
+
+    # User B tries to fetch User A's plant
+    resp = await client.get(
+        f"/plants/{plant_id}",
+        headers={"Authorization": f"Bearer {token_b}"}
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_plant_requires_auth(client: AsyncClient):
+    token = await register_and_login(client, "detail3@example.com")
+    save_resp = await client.post(
+        "/plants", json=VALID_PLANT,
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    plant_id = save_resp.json()["id"]
+
+    resp = await client.get(f"/plants/{plant_id}")
+    assert resp.status_code == 401
+
+
+# --- DELETE /plants/{id} ---
+
+@pytest.mark.asyncio
+async def test_delete_plant_removes_it(client: AsyncClient):
+    """DELETE /plants/{id} returns 204 and plant is gone from GET /plants."""
+    token = await register_and_login(client, "delete1@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    save_resp = await client.post("/plants", json=VALID_PLANT, headers=headers)
+    plant_id = save_resp.json()["id"]
+
+    delete_resp = await client.delete(f"/plants/{plant_id}", headers=headers)
+    assert delete_resp.status_code == 204
+
+    # Plant no longer in list
+    list_resp = await client.get("/plants", headers=headers)
+    assert list_resp.json() == []
+
+    # Plant no longer fetchable by ID
+    detail_resp = await client.get(f"/plants/{plant_id}", headers=headers)
+    assert detail_resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_plant_returns_404_for_another_users_plant(client: AsyncClient):
+    """SECURITY: User B cannot delete User A's plant."""
+    token_a = await register_and_login(client, "delete2a@example.com")
+    token_b = await register_and_login(client, "delete2b@example.com")
+
+    save_resp = await client.post(
+        "/plants", json=VALID_PLANT,
+        headers={"Authorization": f"Bearer {token_a}"}
+    )
+    plant_id = save_resp.json()["id"]
+
+    resp = await client.delete(
+        f"/plants/{plant_id}",
+        headers={"Authorization": f"Bearer {token_b}"}
+    )
+    assert resp.status_code == 404
+
+    # Plant still exists for User A
+    detail_resp = await client.get(
+        f"/plants/{plant_id}",
+        headers={"Authorization": f"Bearer {token_a}"}
+    )
+    assert detail_resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_delete_plant_requires_auth(client: AsyncClient):
+    token = await register_and_login(client, "delete3@example.com")
+    save_resp = await client.post(
+        "/plants", json=VALID_PLANT,
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    plant_id = save_resp.json()["id"]
+
+    resp = await client.delete(f"/plants/{plant_id}")
     assert resp.status_code == 401

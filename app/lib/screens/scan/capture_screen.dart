@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';             // PlatformException — thr
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'preview_screen.dart';
+import '../../theme/app_theme.dart';
 
 class CaptureScreen extends StatefulWidget {
   const CaptureScreen({super.key});
@@ -98,7 +99,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Icon(Icons.eco, size: 64, color: Color(0xFF4CAF50)),
+              const Icon(Icons.eco, size: 64, color: AppTheme.green),
               const SizedBox(height: 12),
               Text(
                 'Take or choose a photo',
@@ -161,7 +162,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
               if (_isLoading) ...[
                 const SizedBox(height: 32),
                 const Center(
-                  child: CircularProgressIndicator(color: Color(0xFF4CAF50)),
+                  child: CircularProgressIndicator(color: AppTheme.green),
                 ),
               ],
             ],
@@ -196,7 +197,7 @@ class _PickerButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
         decoration: BoxDecoration(
           border: Border.all(
-            color: onTap == null ? Colors.grey[300]! : const Color(0xFF4CAF50),
+            color: onTap == null ? Colors.grey[300]! : AppTheme.green,
             width: 1.5,
           ),
           borderRadius: BorderRadius.circular(12),
@@ -205,7 +206,7 @@ class _PickerButton extends StatelessWidget {
           children: [
             Icon(icon,
                 size: 32,
-                color: onTap == null ? Colors.grey : const Color(0xFF4CAF50)),
+                color: onTap == null ? Colors.grey : AppTheme.green),
             const SizedBox(width: 16),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,

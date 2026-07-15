@@ -4,6 +4,7 @@ import '../../services/auth_service.dart';
 import '../../services/token_service.dart';
 import 'register_screen.dart';
 import 'forgot_password_screen.dart';
+import '../../theme/app_theme.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -69,7 +70,7 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Icon(Icons.eco, size: 64, color: Color(0xFF4CAF50)),
+                  const Icon(Icons.eco, size: 64, color: AppTheme.green),
                   const SizedBox(height: 12),
                   Text(
                     'PlantIt Helper',
@@ -159,7 +160,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       child: const Text(
                         'Forgot password?',
-                        style: TextStyle(color: Color(0xFF4CAF50)),
+                        style: TextStyle(color: AppTheme.green),
                       ),
                     ),
                   ),
@@ -169,7 +170,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   FilledButton(
                     onPressed: _isLoading ? null : _submit,
                     style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF4CAF50),
+                      backgroundColor: AppTheme.green,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                     child: _isLoading
@@ -200,7 +201,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: const Text(
                           'Sign Up',
                           style: TextStyle(
-                            color: Color(0xFF4CAF50),
+                            color: AppTheme.green,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
