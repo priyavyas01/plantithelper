@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import '../../models/scan_models.dart';
 import '../../services/plant_service.dart';
-import '../../widgets/confidence_badge.dart';
+import '../../widgets/health_badge.dart';
 import '../../widgets/care_grid.dart';
 import '../../theme/app_theme.dart';
 
 // PlantDetailScreen fetches full plant data by ID and displays:
-//   - plant name + scientific name + confidence badge
+//   - plant name + scientific name + health badge + observation
 //   - full care guide (2×2 grid)
 //   - care tips list
 //   - optional fun fact
@@ -176,7 +176,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> {
 }
 
 // ---------------------------------------------------------------------------
-// Header: name, scientific name, confidence badge
+// Header: name, scientific name, health badge + observation
 // ---------------------------------------------------------------------------
 
 class _PlantHeader extends StatelessWidget {
@@ -204,7 +204,17 @@ class _PlantHeader extends StatelessWidget {
               ?.copyWith(fontStyle: FontStyle.italic, color: Colors.grey[600]),
         ),
         const SizedBox(height: 10),
-        ConfidenceBadge(confidence: plant.confidence),
+        HealthBadge(health: plant.health),
+        if (plant.healthObservation.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(
+            plant.healthObservation,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Colors.grey[700],
+                  fontStyle: FontStyle.italic,
+                ),
+          ),
+        ],
       ],
     );
   }

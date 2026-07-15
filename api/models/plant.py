@@ -22,7 +22,13 @@ class Plant(Base):
     # From Claude response
     common_name = Column(String(100), nullable=False)
     scientific_name = Column(String(150), nullable=False)
-    confidence = Column(String(10), nullable=False)  # low / medium / high
+    confidence = Column(String(10), nullable=False)  # low / medium / high — kept for analytics, not shown in UI
+    # Health assessment from Claude at scan time
+    # health is constrained to: healthy / needs_attention / concerning / unknown
+    # health_observation is one sentence describing what Claude saw
+    # Both default to safe values so old rows remain valid after migration
+    health = Column(String(20), nullable=False, server_default="unknown")
+    health_observation = Column(Text, nullable=False, server_default="")
     # Full care guide stored as JSON — structure mirrors CareInfo schema
     # Using generic JSON so the model works with both Postgres (JSONB) and SQLite (tests)
     care_json = Column(JSON, nullable=False)

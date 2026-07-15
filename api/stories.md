@@ -31,13 +31,23 @@
 | E1 | Foundation & Auth | 3 | 3 |
 | E2 | Plant Scan & Identification | 3 | 3 |
 | E3 | Save & My Plants Collection | 3 | 3 |
-| E4 | Plant Detail & Care Info | 3 | 2 |
-| E5 | Chat with Your Plant | 2 | 0 |
+| E4 | Plant Detail, Health & Scan History | 4 | 3 |
+| E5 | Chat with Your Plant | 3 | 0 |
 | E6 | Care Schedule & Reminders | 2 | 0 |
 | E7 | Plant Journal | 1 | 0 |
-| E8 | Plant Health Tracking | 2 | 0 |
 
-**Total: 19 stories — 11 done**
+**Total: 19 stories — 12 done**
+
+**Roadmap rationale (updated 2026-07-15):**
+- E8 (Plant Health Tracking) was dissolved. Health assessment belongs at scan time
+  (E4-S3) not as a late-stage epic — it makes every scan immediately actionable.
+  Health updates from chat move to E5-S3.
+- `confidence` is removed from all UI surfaces. It is an AI metric, not a user metric.
+  Users care whether their plant looks healthy, not how certain the model is.
+- E4-S2 is rewritten as Scan History (not replace). Re-scanning adds a record; it never
+  destroys prior data. Scan history feeds richer context to Claude in chat (E5).
+- Health observation replaces the confidence badge everywhere: result screen,
+  detail screen, collection cards.
 
 ---
 
@@ -281,7 +291,7 @@ future improvement using shared_preferences.
 **Dependencies:** E3-S2 complete [done], E4-S1 complete (detail cache needs the detail endpoint)
 
 
-## E4 — Plant Detail & Care Info
+## E4 — Plant Detail, Health & Scan History
 
 ### E4-S1: Plant Detail Screen [done]
 **Completed:** 2026-07-15
@@ -354,69 +364,413 @@ stack in one tap. Keep "Scan Another Plant" as-is for users who want to scan aga
 - [x] If plant was saved before tapping "Done", it appears in the list immediately
 
 
-### E4-S2: Re-scan a Plant [not started]
-**Goal:** User can re-scan an existing saved plant to update its identification and care info.
+### E4-S3: Health Assessment at Scan Time [done]
+**Goal:** Every scan returns a plain-English, actionable health observation alongside
+plant identification. Health replaces confidence everywhere in the UI — confidence is
+an AI-internal metric the user gains nothing from seeing. Health is something they can
+act on immediately.
 
 **User Story:**
-> As a user, my plant has grown and I want to scan it again to get updated care advice.
+> As a user, when I scan my plant I want to know immediately whether it looks healthy
+> or if something is wrong — and I want to know exactly what to do about it, not just
+> a colour-coded badge I have to interpret myself.
+
+---
+
+**What changes about the Claude prompt:**
+
+Add to the existing system prompt:
+
+> "Also assess the plant's visible health from the photo. Look for: leaf colour changes
+> (yellowing, browning, blackening), spots or lesions, drooping or wilting, visible
+> pests (mealybugs, spider mites, aphids, scale), root rot signs, sunburn, overwatering
+> or underwatering signs. Return a `health` value and a plain-English `health_observation`
+> that is specific and actionable — tell the user what you see and what to do.
+> Keep `health_observation` under 200 characters. If the photo quality prevents health
+> assessment, return health: 'unknown' and health_observation: null."
+
+**Health values (strictly validated on backend):**
+| Value | Badge | When to use |
+|-------|-------|-------------|
+| `healthy` | Green dot | No visible issues, plant looks well |
+| `needs_attention` | Amber dot | Minor concerns — slight yellowing, dry-looking soil, minor droop |
+| `concerning` | Red dot | Clear problems — visible pests, significant browning, severe wilt |
+| `unknown` | No badge shown | Photo too dark/blurry, or health cannot be determined |
+
+**`health_observation` examples:**
+- `healthy`: *"Leaves are dark green and firm with no visible stress signs. Keep up the current care routine."*
+- `needs_attention`: *"Lower leaves are yellowing and curling — likely too much direct sunlight. Move to bright indirect light."*
+- `concerning`: *"Small white clusters on leaf undersides — looks like mealybugs. Isolate and treat with neem oil."*
+- `unknown`: always null — no text rendered in the UI
+
+**Why remove confidence from the UI:**
+Confidence was shown as `high / medium / low`. Users read "medium confidence" and thought
+the app was unsure about everything, including care advice. In reality confidence refers only
+to species identification — a medium-confidence ID can still give perfectly valid care advice.
+We keep `confidence` in the database for debugging and analytics. We just stop showing it.
+
+---
+
+**Backend changes:**
+
+DB migration:
+```sql
+ALTER TABLE plants ADD COLUMN health VARCHAR(20) NOT NULL DEFAULT 'unknown';
+ALTER TABLE plants ADD COLUMN health_observation TEXT;
+```
+
+`HealthStatus = Literal["healthy", "needs_attention", "concerning", "unknown"]`
+Pydantic validates this — invalid values from Claude cause a 500 before anything is stored.
+
+`health_observation` is truncated to 300 chars on the backend if Claude ignores the prompt
+length guidance. Logged as a warning so we can tune the prompt if it happens often.
+
+Updated `POST /scan` response:
+```json
+{
+  "identified": true,
+  "common_name": "Monstera",
+  "scientific_name": "Monstera deliciosa",
+  "confidence": "high",
+  "care": { "light": "...", "water": "...", "humidity": "...", "temperature": "..." },
+  "tips": ["..."],
+  "fun_fact": "...",
+  "health": "needs_attention",
+  "health_observation": "Lower leaves yellowing — likely overwatering. Let soil dry out fully between waterings."
+}
+```
+
+`GET /plants` (list) and `GET /plants/{id}` (detail) both return `health` and
+`health_observation` so the UI never needs a second round trip.
+
+---
+
+**Flutter UI changes:**
+
+*ResultScreen:*
+- Remove `ConfidenceBadge` entirely
+- Below plant name: `HealthBadge` (coloured dot + label) + `health_observation` text in a subtle card
+- `unknown` health: show neither badge nor card — scan result still shows plant name and care guide
+
+*PlantDetailScreen:*
+- Remove confidence section
+- Add `HealthSection`: badge + full observation text
+- `unknown` with no prior scans: show "Scan again to assess your plant's health" with a camera icon link
+
+*Collection card (PlantCard):*
+- Remove confidence badge from `_BottomRow`
+- Add small coloured dot (8px) + short label: "Looks healthy" / "Needs attention" / "Check your plant"
+- `unknown`: show nothing — no dot, no label, no empty space
+
+Delete `app/lib/widgets/confidence_badge.dart` and all imports once all usages are removed.
+
+---
 
 **Acceptance Criteria:**
-- [ ] "Scan Again" on PlantDetailScreen → goes to CaptureScreen with plant context
-- [ ] After successful scan, shows ResultScreen with option "Update [plant name]"
-- [ ] `PATCH /plants/{id}` updates: common_name, scientific_name, confidence, care_json, fun_fact
-- [ ] Updated care info immediately visible on PlantDetailScreen after returning
-- [ ] Original saved date preserved; add `updated_at` field to plants table
-- [ ] If user does NOT tap "Update" and just taps "Scan Another" — no update made
+- [ ] Claude prompt updated to request `health` + `health_observation` with 200 char guidance
+- [ ] `HealthStatus` Literal validated on backend — invalid values rejected before storing
+- [ ] `health_observation` truncated to 300 chars if Claude exceeds guidance; warning logged
+- [ ] DB migration adds `health` (default `'unknown'`) and `health_observation` (nullable) to `plants`
+- [ ] `POST /scan` response includes `health` and `health_observation`
+- [ ] `POST /plants` stores both fields
+- [ ] `GET /plants` list returns `health` and `health_observation` per plant
+- [ ] `GET /plants/{id}` detail returns `health` and `health_observation`
+- [ ] ResultScreen: confidence badge removed, health badge + observation shown (or nothing if unknown)
+- [ ] PlantDetailScreen: confidence removed, health section shown
+- [ ] PlantCard: confidence badge removed, health dot + short label shown (or nothing if unknown)
+- [ ] `unknown` health: no badge, no text, no empty card visible anywhere in the app
+- [ ] Old saved plants (health='unknown') show clean cards — no "unknown" label
+- [ ] `ConfidenceBadge` widget deleted; no compile errors
+- [ ] `confidence` field still present in DB, API responses, and Dart models — just not rendered
 
 **Edge Cases:**
-- Scan identifies a completely different plant → show warning "This looks like a different plant. Update anyway?" confirm dialog
-- `PATCH` fails → show error, keep old data — never leave plant in partial state
-- User re-scans and Claude returns lower confidence — still allow update, show confidence changed
-- Network drops mid-PATCH → retry once, then show error
+- Claude returns a health value outside the allowed set (e.g. `"good"`) → Pydantic rejects it, scan endpoint returns 500, error logged — never silently store bad data
+- Claude returns `health_observation` when health is `unknown` → backend sets observation to null before storing
+- Photo is very dark or blurry → Claude returns `unknown`, app shows no health badge — this is correct, not an error state
+- Health is `concerning` (red) → do not block the save flow — the badge is informational only, not a gate
+- User's plant was previously `healthy` in collection, re-scan (E4-S2) returns `concerning` → badge on collection card updates after refresh — no automatic alert pushed to user (that is a future push notification story)
+- `health_observation` contains special characters or apostrophes → store and render without escaping issues (standard UTF-8 text field)
 
-**Dependencies:** E4-S1 complete
+**Tests to write:**
+- Unit (backend): `POST /scan` response contains `health` and `health_observation`
+- Unit (backend): invalid health value `"good"` from Claude causes 500, not a 201
+- Unit (backend): `health_observation` truncated to 300 chars when Claude returns too much
+- Unit (backend): `health_observation` set to null when health is `unknown`, even if Claude returned text
+- Unit (backend): `POST /plants` stores health fields correctly
+- Widget: `HealthBadge` renders correct colour for each value
+- Widget: no badge or text rendered when health is `unknown`
+- Widget: `ConfidenceBadge` does not appear anywhere in widget tree after this story
+
+**Dependencies:** E2-S3 complete [done], E3-S1 complete [done]
+
+---
+
+### E4-S2: Scan History [not started]
+**Goal:** Re-scanning a saved plant adds a new scan record rather than overwriting the existing
+data. Every scan is preserved. PlantDetailScreen shows the current scan plus a scrollable history.
+Claude receives scan history as context in chat — enabling observations like "your plant's health
+has declined since January, here is what may have changed."
+
+**User Story:**
+> As a user, I want to scan my plant again months later and see how its identification and
+> health have changed — without losing what the app told me before.
+
+**Why not replace:**
+Replacing destroys information both the user and the AI benefit from. If a plant was `healthy`
+in January and `concerning` in April, that trend is meaningful — it tells the user something
+changed in their care routine and gives Claude context for better advice. Replacing silently
+discards that signal.
+
+---
+
+**Architecture — data model migration:**
+
+This is the most significant schema change in the project. The current `plants` table embeds
+all scan data directly. After this story, scan data lives in a child table.
+
+Current:
+```
+plants: id, user_id, name, common_name, scientific_name, confidence,
+        care_json, fun_fact, health, health_observation, created_at
+```
+
+After:
+```
+plants:      id, user_id, name, created_at
+plant_scans: id, plant_id, common_name, scientific_name, confidence,
+             care_json, fun_fact, health, health_observation, scanned_at
+```
+
+"Current" data = the most recent `plant_scans` row for a given `plant_id`.
+All DELETE operations on `plants` cascade to `plant_scans` (FK constraint).
+
+**The Alembic migration must include a data migration step — not just DDL:**
+```python
+# 1. CREATE TABLE plant_scans (...)
+# 2. INSERT INTO plant_scans
+#    SELECT gen_random_uuid(), id, common_name, scientific_name,
+#           confidence, care_json, fun_fact, health, health_observation, created_at
+#    FROM plants
+# 3. ALTER TABLE plants DROP COLUMN common_name, scientific_name,
+#    confidence, care_json, fun_fact, health, health_observation
+```
+If step 2 fails (e.g. bad data), step 3 must not run. Alembic wraps the whole migration
+in a transaction — test on a copy of prod data before deploying.
+
+**Performance — GET /plants must not use N+1 queries:**
+Each plant now requires fetching its latest scan. Do NOT loop and query per plant.
+Use a lateral join or window function:
+```sql
+SELECT p.id, p.name, p.created_at, s.*
+FROM plants p
+JOIN LATERAL (
+  SELECT * FROM plant_scans
+  WHERE plant_id = p.id
+  ORDER BY scanned_at DESC
+  LIMIT 1
+) s ON true
+WHERE p.user_id = :user_id
+ORDER BY p.created_at DESC
+```
+
+---
+
+**New API endpoints:**
+
+`POST /plants/{id}/scans`
+- Adds a scan to an existing plant. Body: same as `POST /plants` minus `name`.
+- Response 201: the new `plant_scans` row
+- 404 if plant not found or belongs to another user
+
+`GET /plants/{id}/scans`
+- Returns full scan history, newest first, paginated at 20
+- Each entry: id, common_name, scientific_name, health, health_observation, care, tips, fun_fact, scanned_at
+
+---
+
+**Flutter UX — the re-scan flow:**
+
+*From PlantDetailScreen:*
+"Scan Again" button (currently a placeholder) navigates to CaptureScreen passing `plantId`
+as a route argument. CaptureScreen carries `plantId` forward through PreviewScreen to ResultScreen.
+
+*ResultScreen when `plantId` context is present — shows two buttons:*
+1. **"Update [plant name]"** (primary, filled green) — calls `POST /plants/{plantId}/scans`
+2. **"Save as New Plant"** (secondary, outlined) — original flow
+
+If the scanned genus differs significantly from the saved plant's name, show a warning
+banner above the buttons:
+> "This looks like a different plant from [saved name]. You can still add this scan to its history, or save it as a new plant."
+
+*PlantDetailScreen — History section:*
+Shown only when `scan_count > 1`. A collapsible "Scan History" section below the care guide.
+Each row: health dot + date ("3 months ago") + common name if it changed from the previous scan.
+Tap a row to expand: shows full observation text for that scan. Does not replace current view.
+No delete-individual-scan in MVP — delete the whole plant if needed.
+
+---
+
+**Acceptance Criteria:**
+- [ ] Alembic migration: creates `plant_scans`, migrates all existing plant data, drops columns — all in one transaction
+- [ ] `POST /plants` creates `plants` + `plant_scans` rows atomically — if either insert fails, both roll back
+- [ ] `POST /plants/{id}/scans` adds scan to existing plant; 404 if not found or wrong user (SECURITY)
+- [ ] `GET /plants` uses lateral join — no N+1 queries regardless of list size
+- [ ] `GET /plants/{id}` returns latest scan data + `scan_count` field
+- [ ] `GET /plants/{id}/scans` returns history newest first, paginated at 20
+- [ ] ResultScreen shows "Update [name]" + "Save as New" when opened via re-scan flow
+- [ ] "Different plant" warning shown when genus mismatch detected
+- [ ] PlantDetailScreen "Scan Again" button navigates correctly with plantId context
+- [ ] History section visible only when scan_count > 1
+- [ ] History section hidden on plants with only one scan (no empty section)
+- [ ] Caching: `getPlant` cache invalidated after adding a new scan
+
+**Edge Cases:**
+- Scan in progress, plant deleted on another device → `POST /plants/{id}/scans` returns 404 → show "Plant no longer exists. Save as a new plant?" with a button
+- Migration: plants created before E4-S3 may have `health='unknown'` and null `health_observation` → these are valid values, migration handles them correctly
+- `GET /plants` for a user where migration partially failed (plant has no scan rows) → return plant with `latest_scan: null`; Flutter shows an "incomplete" card state rather than crashing
+- Scan history has 20+ entries → paginate; "Load earlier scans" button at bottom of history list
+- Identical result scanned twice → create two `plant_scans` rows — no deduplication. The user chose to scan again; that is intentional and should be recorded.
+- "Scan Again" tapped while offline → scan fails at `POST /scan` step, not at save step — same error handling as the standard scan flow
+
+**Tests to write:**
+- Unit (backend): `POST /plants` creates both rows; if `plant_scans` insert fails, `plants` row is also rolled back
+- Unit (backend): `POST /plants/{id}/scans` returns 404 for another user's plant (SECURITY)
+- Unit (backend): `GET /plants` returns latest scan data for each plant (join correct)
+- Unit (backend): `GET /plants/{id}` includes `scan_count`
+- Unit (backend): `GET /plants/{id}/scans` returns results newest first
+- Widget: ResultScreen shows "Update [name]" button when plantId context is present
+- Widget: "different plant" warning shown when genus differs
+- Widget: history section not rendered when scan_count is 1
+
+**Dependencies:** E4-S1 complete [done], E4-S3 complete (health fields on plant_scans)
 
 ---
 
 ## E5 — Chat with Your Plant
 
 ### E5-S1: Chat Screen UI [not started]
-**Goal:** Message bubble UI for chatting with Claude about a specific plant.
+**Goal:** A conversational screen where the user can ask Claude anything about a specific
+plant, with Claude having full context about that plant's identity, care needs, current
+health, and scan history.
 
 **User Story:**
-> As a user, I want to ask my plant questions like "why are my leaves turning yellow?" and get personalised advice based on that plant's care profile.
+> As a user, I want to tap "Ask Claude" on my plant and have a real conversation — not
+> just get static care tips. I want Claude to already know what my plant is, what it
+> needs, and what it looked like when I last scanned it.
+
+**What makes this different from a generic chat:**
+Claude is not a blank slate when this screen opens. The system prompt is built from the
+plant's full record: identity, care guide, current health observation, and a summary of
+past scans. This means Claude can open with something relevant like:
+> "Your Monstera had yellowing lower leaves when you last scanned it — want to talk about that?"
+
+This is the payoff for doing E4-S3 (health) and E4-S2 (scan history) first.
+
+---
+
+**System prompt structure (backend constructs this per request):**
+```
+You are a plant care expert helping a user look after their plant.
+
+Plant: {common_name} ({scientific_name})
+Nickname: {user_name}
+Care needs: Light: {light}. Water: {water}. Humidity: {humidity}. Temperature: {temperature}.
+Tips: {tips joined as bullet points}
+{fun_fact if present}
+
+Current health: {health}
+Health observation: {health_observation if not unknown else "Not yet assessed."}
+
+Scan history ({scan_count} total scans):
+{for each of last 3 scans: "{scanned_at_relative}: {health} — {health_observation or 'No observation'}"}
+
+Keep your responses conversational and concise. Be direct about problems.
+If the user describes new symptoms, address them specifically.
+```
+
+---
+
+**API:**
+
+`POST /plants/{id}/chat`
+Request: `{ "message": "Why are my leaves turning yellow?" }`
+Response: `{ "reply": "...", "message_id": "...", "timestamp": "..." }`
+- Auth: plant must belong to current user (ownership check)
+- System prompt built fresh from current plant state on every request (always up to date)
+- Conversation history passed as `messages` array to Claude (last 20 messages for context window)
+- Returns 404 if plant not found or belongs to another user
+
+`GET /plants/{id}/chat`
+Response: array of `{ role, content, timestamp }`, oldest first, last 50
+- Used to restore history when the chat screen opens
+
+---
+
+**Flutter UX:**
+
+*Entry point:* "Ask Claude" button on PlantDetailScreen (below the health section).
+
+*Opening the screen:*
+- If no prior messages: show an empty state with a suggested first question
+  > "You could ask: 'How often should I water this?' or 'My leaves are turning yellow — why?'"
+- If prior messages exist: load history, scroll to bottom
+
+*Message layout:*
+- User messages: right-aligned, filled green bubble, white text
+- Claude messages: left-aligned, grey bubble, dark text, plant avatar icon
+- Timestamps shown once per group of messages (not on every bubble)
+- "Typing..." animated dots indicator while request in flight
+
+*Input row (pinned to bottom):*
+- TextField + Send button
+- Send button: disabled when input is empty OR request in flight
+- Keyboard behaviour: `resizeToAvoidBottomInset: true` — input field lifts above keyboard on both iOS and Android
+- On send: message appended to list immediately (optimistic), "Typing..." shown, response fills in
+
+*Scroll behaviour:*
+- Auto-scroll to bottom on new message (user or Claude)
+- If user has scrolled up to read history, do NOT auto-scroll until they scroll back to bottom
+
+---
 
 **Acceptance Criteria:**
-- [ ] Accessible from PlantDetailScreen ("Ask a Question" button)
-- [ ] User messages: right-aligned, green bubbles
-- [ ] AI messages: left-aligned, grey bubbles
-- [ ] Input field pinned at bottom; keyboard does not cover it (iOS + Android)
-- [ ] Send button disabled when input empty or request in flight (prevents double-send)
-- [ ] "Typing..." indicator while waiting for Claude response
-- [ ] Auto-scrolls to latest message
-- [ ] `POST /plants/{id}/chat` sends message, returns Claude response
-- [ ] Chat history loaded on screen open (`GET /plants/{id}/chat`)
-
-**API: POST /plants/{id}/chat**
-Request: `{ "message": "Why are my leaves yellow?" }`
-Response: `{ "reply": "...", "timestamp": "..." }`
-
-**System prompt includes:** species, common name, confidence, care info, fun fact
+- [ ] "Ask Claude" button on PlantDetailScreen navigates to ChatScreen with plantId
+- [ ] ChatScreen loads message history on open (`GET /plants/{id}/chat`)
+- [ ] Empty state with suggested questions shown when no prior messages
+- [ ] User message bubble: right-aligned green
+- [ ] Claude message bubble: left-aligned grey
+- [ ] "Typing..." indicator shown while waiting for response
+- [ ] Send button disabled when input empty or request in flight
+- [ ] Input field lifts above keyboard on iOS and Android
+- [ ] Auto-scroll to latest message on new message
+- [ ] User's message appears immediately (before server responds)
+- [ ] System prompt includes plant name, care, health, health_observation, last 3 scans
+- [ ] `POST /plants/{id}/chat` returns 404 for another user's plant (SECURITY)
+- [ ] 20 most recent messages passed to Claude as conversation history
 
 **Edge Cases:**
-- Empty message → send button disabled, no API call made
-- Claude returns very long response → scrollable bubble, not truncated
-- Network error → show "Could not send. Try again." inline, keep user's message in input
-- Plant deleted while chat is open → next send returns 404 → "This plant no longer exists" banner
-- User sends rapid messages → each request queued, not dropped
+- Empty message → send button disabled, no API call
+- Claude response is very long → bubble wraps, scrollable — never truncated
+- Network error mid-send → "Could not send. Try again." shown inline below the failed message; user's text stays in the input field
+- Plant deleted while chat open → next send returns 404 → full-screen banner "This plant no longer exists" with "Go back" button
+- User sends a message before history loads → queue message, send after history resolves
+- User rapidly taps send → button disabled after first tap; second tap is a no-op
+- Chat history has 50+ messages → load last 50 on open; "Load earlier messages" at top
+- Claude takes > 10 seconds → "Typing..." stays; no timeout in MVP (Claude is occasionally slow)
+- User pastes a very long message (>1000 chars) → allow it, Claude can handle it; no artificial cap
 
 **Tests to write:**
-- Unit: `POST /plants/{id}/chat` returns 401 for another user's plant
-- Unit: system prompt contains plant name and care info
+- Unit (backend): `POST /plants/{id}/chat` returns 404 for another user's plant (SECURITY)
+- Unit (backend): system prompt contains plant common_name, care, health_observation
+- Unit (backend): system prompt contains last 3 scans when scan history exists
+- Unit (backend): conversation history capped at last 20 messages sent to Claude
 - Widget: send button disabled when input is empty
+- Widget: send button disabled while request in flight
 - Widget: "Typing..." indicator shown while request in flight
+- Widget: user message appears immediately on send (before server responds)
+- Widget: empty state with suggested questions shown when no history
 
-**Dependencies:** E4-S1 complete
+**Dependencies:** E4-S1 complete [done], E4-S3 complete (health context in system prompt), E4-S2 complete (scan history in system prompt)
 
 ---
 
@@ -441,6 +795,43 @@ Response: `{ "reply": "...", "timestamp": "..." }`
 - Message content very long → store fully, wrap in bubble
 
 **Dependencies:** E5-S1 complete
+
+---
+
+### E5-S3: Health Updates from Chat [not started]
+**Goal:** When the user describes symptoms in chat, Claude updates the plant's health status
+in the app — so the collection card reflects what the user just told Claude.
+
+**User Story:**
+> As a user, when I tell Claude "the leaves have gone yellow at the edges", I want my
+> plant's status in the collection to update automatically — not just get a text reply.
+
+**How it works:**
+Claude's chat system prompt includes the current health status and observation. When the
+user describes symptoms, Claude decides whether the health has changed and returns a
+structured `health_update` field alongside the conversational reply. The app applies
+the update silently — no extra step for the user.
+
+Example:
+> User: "The lower leaves have started going really yellow"
+> Claude reply: "Yellowing lower leaves on a Monstera usually means overwatering..."
+> `health_update`: `{ "health": "needs_attention", "health_observation": "User reports yellowing lower leaves — likely overwatering. Reduce watering frequency." }`
+
+**Acceptance Criteria:**
+- [ ] `POST /plants/{id}/chat` response includes optional `health_update` object
+- [ ] If `health_update` present: app calls `PATCH /plants/{id}/health` immediately after receiving reply
+- [ ] Collection card health badge updates without requiring pull-to-refresh
+- [ ] PlantDetailScreen health section reflects the new status on next open
+- [ ] Chat reply naturally incorporates the health change ("I've noted your plant needs attention")
+- [ ] Health can go back to `healthy` if user says "it's looking much better now"
+- [ ] If Claude is not confident enough to update → returns no `health_update`, status unchanged
+
+**Edge Cases:**
+- Chat message unrelated to health → no `health_update` in response, normal reply
+- `PATCH /health` fails → show no error to user, health stays unchanged (silent fail — chat was still useful)
+- User and Claude disagree on health → Claude's assessment from most recent scan takes precedence
+
+**Dependencies:** E5-S1 complete, E4-S3 complete (health field exists)
 
 ---
 
@@ -553,91 +944,17 @@ created_at  TIMESTAMPTZ
 
 ---
 
-## E8 — Plant Health Tracking
+## E8 — Plant Health Tracking [absorbed]
 
-Health status gives users an at-a-glance signal about how their plant is doing.
-It replaces the "confidence" badge on collection cards — confidence is an AI
-metric; health is something the user cares about every day.
+This epic was dissolved on 2026-07-15.
 
-Health has three sources: the initial scan photo (Claude sees visible symptoms),
-chat (user describes what they're observing), and re-scanning over time.
+- **E8-S1** (Health Assessment at Scan Time) → moved to **E4-S3** and pulled forward.
+  Health belongs at the point of scanning, not as a late addition.
+- **E8-S2** (Health Updates from Chat) → moved to **E5-S3**.
+  It depends on chat existing, so it lives in the chat epic.
 
-### E8-S1: Health Assessment at Scan Time [not started]
-**Goal:** When a plant is identified, Claude also assesses its visible health from the photo.
-
-**User Story:**
-> As a user, when I scan my plant I want to know not just what it is but whether it looks healthy, so I can act on any problems straight away.
-
-**Acceptance Criteria:**
-- [ ] `POST /scan` response includes `health` field: `healthy` / `needs_attention` / `concerning` / `unknown`
-- [ ] `POST /scan` response includes optional `health_notes` (e.g. "Yellowing on lower leaves suggests overwatering")
-- [ ] `POST /plants` stores `health` and `health_notes` on save
-- [ ] ResultScreen shows a health badge below the confidence badge
-- [ ] Health badge colours: green / amber / red / grey
-- [ ] `plants` table gains `health` VARCHAR(20) and `health_notes` TEXT columns (migration)
-- [ ] Collection card shows health badge instead of confidence badge
-- [ ] `unknown` health shows no badge (clean default before any assessment)
-
-**Claude prompt change:**
-Add to system prompt: assess visible health signs (leaf colour, spots, drooping,
-pests) and return `health` + `health_notes` alongside plant identification.
-
-**Health values:**
-| Value | Meaning | Badge colour |
-|-------|---------|-------------|
-| `healthy` | No visible issues | Green |
-| `needs_attention` | Minor concerns (slight yellowing, dry soil) | Amber |
-| `concerning` | Clear problems (spots, pests, severe wilting) | Red |
-| `unknown` | Could not assess from photo | No badge |
-
-**DB: plants table additions**
-```
-health        VARCHAR(20) default 'unknown'
-health_notes  TEXT nullable
-```
-
-**Edge Cases:**
-- Claude cannot assess health from the photo → return `unknown`, no notes
-- User saves with `unknown` health → no badge shown, not an error
-- `health_notes` is long → store fully, show truncated on card (full on detail)
-- Old saved plants before this feature → default `unknown` via migration
-
-**Tests to write:**
-- Unit: `POST /scan` returns `health` field in response
-- Unit: `POST /plants` stores health and health_notes
-- Widget: health badge shows correct colour per value
-- Widget: `unknown` health shows no badge
-
-**Dependencies:** E2-S3 complete [done], E3-S1 complete [done]
-
----
-
-### E8-S2: Health Updates from Chat [not started]
-**Goal:** When a user describes symptoms in chat, Claude updates the plant's health status.
-
-**User Story:**
-> As a user, when I tell my plant assistant "the leaves are going yellow at the edges" I want the app to flag my plant as needing attention, not just give me text advice.
-
-**Acceptance Criteria:**
-- [ ] After each chat reply, Claude returns an optional `health_update` object
-- [ ] If `health_update` present: `PATCH /plants/{id}` updates health + health_notes
-- [ ] Collection card health badge updates immediately (no pull-to-refresh needed)
-- [ ] Chat reply includes the health context ("I've updated your plant's status to Needs Attention")
-- [ ] Health history not stored (only current status matters for MVP)
-
-**How it works:**
-Claude's chat system prompt includes the current health status. When the user
-describes symptoms, Claude decides whether to update health and returns a
-structured field alongside the conversational reply.
-
-**Edge Cases:**
-- User says "it's fine now" after previous warning → health can go back to `healthy`
-- Claude not confident enough to update → returns no `health_update`, status unchanged
-- Chat message unrelated to health → no update, normal reply
-
-**Dependencies:** E5-S1 complete (chat exists), E8-S1 complete (health field exists)
-
----
+The `confidence` badge is removed from all UI surfaces. It is an internal AI metric.
+Users care whether their plant looks healthy and what to do about it — not a probability score.
 
 ## Open Questions
 

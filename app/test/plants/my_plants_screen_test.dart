@@ -23,6 +23,8 @@ PlantListItem _makePlant({
   String name = 'My Rose',
   String scientificName = 'Rosa rubiginosa',
   String confidence = 'high',
+  String health = 'healthy',
+  String healthObservation = 'Leaves look vibrant and full.',
   DateTime? createdAt,
 }) {
   return PlantListItem(
@@ -31,6 +33,8 @@ PlantListItem _makePlant({
     commonName: 'Rose',
     scientificName: scientificName,
     confidence: confidence,
+    health: health,
+    healthObservation: healthObservation,
     createdAt: createdAt ?? DateTime.now().subtract(const Duration(days: 3)),
   );
 }
@@ -84,20 +88,28 @@ void main() {
       expect(find.text('Could not load plants. Pull to refresh.'), findsOneWidget);
     });
 
-    testWidgets('shows uncertain-ID badge only for low-confidence plant', (tester) async {
+    testWidgets('shows Healthy badge for healthy plant', (tester) async {
       await tester.pumpWidget(
-        _buildScreen(getPlants: () async => PlantListResult([_makePlant(confidence: 'low')])),
+        _buildScreen(getPlants: () async => PlantListResult([_makePlant(health: 'healthy')])),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Uncertain ID'), findsOneWidget);
+      expect(find.text('Healthy'), findsOneWidget);
     });
 
-    testWidgets('does not show uncertain-ID badge for high-confidence plant', (tester) async {
+    testWidgets('shows Needs Attention badge for needs_attention plant', (tester) async {
       await tester.pumpWidget(
-        _buildScreen(getPlants: () async => PlantListResult([_makePlant(confidence: 'high')])),
+        _buildScreen(getPlants: () async => PlantListResult([_makePlant(health: 'needs_attention')])),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Uncertain ID'), findsNothing);
+      expect(find.text('Needs Attention'), findsOneWidget);
+    });
+
+    testWidgets('shows Concerning badge for concerning plant', (tester) async {
+      await tester.pumpWidget(
+        _buildScreen(getPlants: () async => PlantListResult([_makePlant(health: 'concerning')])),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Concerning'), findsOneWidget);
     });
 
     testWidgets('pull-to-refresh calls service again', (tester) async {

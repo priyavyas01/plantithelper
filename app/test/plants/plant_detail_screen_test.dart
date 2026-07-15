@@ -15,6 +15,8 @@ PlantDetail _makePlant({String? funFact}) => PlantDetail(
       commonName: 'Monstera',
       scientificName: 'Monstera deliciosa',
       confidence: 'high',
+      health: 'healthy',
+      healthObservation: 'Leaves look vibrant and full.',
       care: const CareInfo(
         light: 'Bright indirect',
         water: 'Weekly',

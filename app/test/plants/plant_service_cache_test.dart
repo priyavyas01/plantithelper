@@ -106,5 +106,7 @@ PlantListItem _makePlant() => PlantListItem(
       commonName: 'Rose',
       scientificName: 'Rosa rubiginosa',
       confidence: 'high',
+      health: 'healthy',
+      healthObservation: 'Leaves look vibrant and full.',
       createdAt: DateTime.now(),
     );

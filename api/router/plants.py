@@ -114,6 +114,8 @@ async def create_plant(
         common_name=body.common_name,
         scientific_name=body.scientific_name,
         confidence=body.confidence,
+        health=body.health,
+        health_observation=body.health_observation,
         care_json=body.care.model_dump(),
         fun_fact=body.fun_fact,
     )

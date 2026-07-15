@@ -33,8 +33,11 @@ class CareInfo {
 class ScanResult {
   final String commonName;
   final String scientificName;
-  // 'high' | 'medium' | 'low' — drives badge colour in the UI
+  // confidence kept for debugging but not shown in UI — health is user-facing
   final String confidence;
+  // 'healthy' | 'needs_attention' | 'concerning' | 'unknown'
+  final String health;
+  final String healthObservation;
   final CareInfo care;
   final String? funFact;
 
@@ -42,6 +45,8 @@ class ScanResult {
     required this.commonName,
     required this.scientificName,
     required this.confidence,
+    required this.health,
+    required this.healthObservation,
     required this.care,
     this.funFact,
   });
@@ -50,6 +55,8 @@ class ScanResult {
         commonName: json['common_name'] as String,
         scientificName: json['scientific_name'] as String,
         confidence: json['confidence'] as String,
+        health: json['health'] as String? ?? 'unknown',
+        healthObservation: json['health_observation'] as String? ?? '',
         care: CareInfo.fromJson(json['care'] as Map<String, dynamic>),
         funFact: json['fun_fact'] as String?,
       );
@@ -61,6 +68,8 @@ class SavePlantRequest {
   final String commonName;
   final String scientificName;
   final String confidence;
+  final String health;
+  final String healthObservation;
   final CareInfo care;
   final String? funFact;
 
@@ -69,6 +78,8 @@ class SavePlantRequest {
     required this.commonName,
     required this.scientificName,
     required this.confidence,
+    required this.health,
+    required this.healthObservation,
     required this.care,
     this.funFact,
   });
@@ -78,6 +89,8 @@ class SavePlantRequest {
         'common_name': commonName,
         'scientific_name': scientificName,
         'confidence': confidence,
+        'health': health,
+        'health_observation': healthObservation,
         'care': care.toJson(),
         if (funFact != null) 'fun_fact': funFact,
       };
@@ -110,6 +123,8 @@ class PlantListItem {
   final String commonName;
   final String scientificName;
   final String confidence;
+  final String health;
+  final String healthObservation;
   final DateTime createdAt;
 
   const PlantListItem({
@@ -118,6 +133,8 @@ class PlantListItem {
     required this.commonName,
     required this.scientificName,
     required this.confidence,
+    required this.health,
+    required this.healthObservation,
     required this.createdAt,
   });
 
@@ -127,6 +144,8 @@ class PlantListItem {
         commonName: json['common_name'] as String,
         scientificName: json['scientific_name'] as String,
         confidence: json['confidence'] as String,
+        health: json['health'] as String? ?? 'unknown',
+        healthObservation: json['health_observation'] as String? ?? '',
         createdAt: DateTime.parse(json['created_at'] as String),
       );
 }
@@ -139,6 +158,8 @@ class PlantDetail {
   final String commonName;
   final String scientificName;
   final String confidence;
+  final String health;
+  final String healthObservation;
   final CareInfo care;
   final String? funFact;
   final DateTime createdAt;
@@ -149,6 +170,8 @@ class PlantDetail {
     required this.commonName,
     required this.scientificName,
     required this.confidence,
+    required this.health,
+    required this.healthObservation,
     required this.care,
     this.funFact,
     required this.createdAt,
@@ -160,6 +183,8 @@ class PlantDetail {
         commonName: json['common_name'] as String,
         scientificName: json['scientific_name'] as String,
         confidence: json['confidence'] as String,
+        health: json['health'] as String? ?? 'unknown',
+        healthObservation: json['health_observation'] as String? ?? '',
         care: CareInfo.fromJson(json['care'] as Map<String, dynamic>),
         funFact: json['fun_fact'] as String?,
         createdAt: DateTime.parse(json['created_at'] as String),

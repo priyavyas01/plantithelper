@@ -26,6 +26,8 @@ If you can identify a plant, use this format:
   "common_name": "...",
   "scientific_name": "...",
   "confidence": "high" or "medium" or "low",
+  "health": "healthy" or "needs_attention" or "concerning" or "unknown",
+  "health_observation": "One sentence describing what you observe about this plant's health, e.g. 'Leaves look vibrant and full with no visible signs of stress.' or 'Some yellowing on lower leaves — could indicate overwatering or insufficient light.' If health cannot be assessed (e.g. a bare bulb or unclear image), use 'unknown' for health and explain briefly.",
   "care": {
     "light": "...",
     "water": "...",
@@ -35,6 +37,12 @@ If you can identify a plant, use this format:
   },
   "fun_fact": "..."
 }
+
+Health assessment guide:
+- "healthy": Plant looks vigorous, leaves are full and colourful, no visible damage or stress
+- "needs_attention": Minor issues visible — slight yellowing, some leaf curl, small spots, or dry soil cues
+- "concerning": Significant issues — heavy yellowing/browning, wilting, visible pests or rot
+- "unknown": Cannot assess from this image (bare bulb/corm, soil only, image too blurry, no leaves visible)
 
 If no plant is visible or the image is too unclear to identify, use this format:
 {
@@ -112,17 +120,30 @@ async def identify_plant(image_bytes: bytes) -> ScanResponse:
         raise HTTPException(status_code=422, detail=reason)
 
     try:
+        # Truncate health_observation to 300 chars — Claude tends to be verbose.
+        # Python slice [:300] handles strings shorter than 300 chars correctly
+        # (returns the full string), so no conditional needed.
+        raw_observation = data.get("health_observation", "")
+        health_observation = raw_observation[:300]
+
+        # Log the raw health value BEFORE Pydantic validation so that if Claude
+        # returns an unexpected value (e.g. "great"), the 500 error log shows
+        # exactly what came back instead of just a generic validation error.
+        health = data.get("health", "unknown")
+        logger.info(f"health parsed | health={health!r} observation_len={len(health_observation)}")
         result = ScanResponse(
             common_name=data["common_name"],
             scientific_name=data["scientific_name"],
             confidence=data["confidence"],
+            health=health,
+            health_observation=health_observation,
             care=CareInfo(**data["care"]),
             fun_fact=data.get("fun_fact"),  # .get() — Claude sometimes omits this field
         )
         logger.info(
             f"scan complete | name={result.common_name} "
             f"scientific={result.scientific_name} "
-            f"confidence={result.confidence}"
+            f"health={result.health}"
         )
         return result
     except Exception as e:
