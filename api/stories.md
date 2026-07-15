@@ -3,10 +3,10 @@
 ## Status Legend
 | Symbol | Meaning |
 |--------|---------|
-| ✅ | Done |
-| 🚧 | In Progress |
-| ⬜ | Not Started |
-| 🔴 | Blocked |
+| [done] | Done |
+| [in progress] | In Progress |
+| [not started] | Not Started |
+| [blocked] | Blocked |
 
 ---
 
@@ -30,19 +30,20 @@
 |------|-------|---------|------|
 | E1 | Foundation & Auth | 3 | 3 |
 | E2 | Plant Scan & Identification | 3 | 3 |
-| E3 | Save & My Plants Collection | 2 | 0 |
+| E3 | Save & My Plants Collection | 2 | 2 |
 | E4 | Plant Detail & Care Info | 2 | 0 |
 | E5 | Chat with Your Plant | 2 | 0 |
 | E6 | Care Schedule & Reminders | 2 | 0 |
 | E7 | Plant Journal | 1 | 0 |
+| E8 | Plant Health Tracking | 2 | 0 |
 
-**Total: 15 stories — 6 done, 1 in progress**
+**Total: 17 stories — 8 done**
 
 ---
 
 ## E1 — Foundation & Auth
 
-### E1-S1: Project Scaffolding ✅
+### E1-S1: Project Scaffolding [done]
 **Completed:** 2026-07-07
 - Flutter app scaffolded; FastAPI running with `GET /health`
 - Backend folder structure: `models/`, `router/`, `services/`, `db/`
@@ -51,7 +52,7 @@
 
 ---
 
-### E1-S2: User Signup & Login ✅
+### E1-S2: User Signup & Login [done]
 **Completed:** 2026-07-08
 - `POST /auth/register` — bcrypt password, returns access + refresh tokens
 - `POST /auth/login` — same response shape
@@ -64,7 +65,7 @@
 
 ---
 
-### E1-S3: Auth Persistence ✅
+### E1-S3: Auth Persistence [done]
 **Completed:** 2026-07-09
 - `GET /auth/me` — validates token, returns current user
 - `POST /auth/refresh` — token rotation (old token revoked, new pair issued)
@@ -76,7 +77,7 @@
 
 ## E2 — Plant Scan & Identification
 
-### E2-S1: Camera & Gallery Capture ✅
+### E2-S1: Camera & Gallery Capture [done]
 **Completed:** 2026-07-10
 - `CaptureScreen` — two options: Take a Photo / Choose from Gallery
 - `image_picker` for camera and gallery access
@@ -86,7 +87,7 @@
 
 ---
 
-### E2-S2: Preview & Scan ✅
+### E2-S2: Preview & Scan [done]
 **Completed:** 2026-07-10
 - `PreviewScreen` — shows compressed image before submitting
 - Retake button navigates back to capture
@@ -97,7 +98,7 @@
 
 ---
 
-### E2-S3: Plant Identification & Result Screen ✅
+### E2-S3: Plant Identification & Result Screen [done]
 **Completed:** 2026-07-15
 **Branch merged:** `feature/E2-S3-scan-flutter`
 
@@ -127,7 +128,7 @@
 
 ## E3 — Save & My Plants Collection
 
-### E3-S1: Save Plant 🔄
+### E3-S1: Save Plant [done]
 **Goal:** After a successful scan, user saves the plant to their collection with a custom name.
 
 **User Story:**
@@ -195,11 +196,12 @@ created_at  TIMESTAMPTZ
 - Widget: success state shows "Saved" button
 - Widget: error state shows message in bottom sheet
 
-**Dependencies:** E2-S3 complete ✅
+**Dependencies:** E2-S3 complete [done]
 
 ---
 
-### E3-S2: My Plants Collection Screen ⬜
+### E3-S2: My Plants Collection Screen [done]
+**Completed:** 2026-07-15
 **Goal:** Home screen showing all saved plants as a scrollable list. Tap to see detail. FAB to scan.
 
 **User Story:**
@@ -250,7 +252,7 @@ Response (200):
 
 ## E4 — Plant Detail & Care Info
 
-### E4-S1: Plant Detail Screen ⬜
+### E4-S1: Plant Detail Screen [not started]
 **Goal:** Full scrollable screen for a saved plant showing all care info and a re-scan option.
 
 **User Story:**
@@ -291,7 +293,7 @@ Response (204): no body
 
 ---
 
-### E4-S2: Re-scan a Plant ⬜
+### E4-S2: Re-scan a Plant [not started]
 **Goal:** User can re-scan an existing saved plant to update its identification and care info.
 
 **User Story:**
@@ -317,7 +319,7 @@ Response (204): no body
 
 ## E5 — Chat with Your Plant
 
-### E5-S1: Chat Screen UI ⬜
+### E5-S1: Chat Screen UI [not started]
 **Goal:** Message bubble UI for chatting with Claude about a specific plant.
 
 **User Story:**
@@ -357,7 +359,7 @@ Response: `{ "reply": "...", "timestamp": "..." }`
 
 ---
 
-### E5-S2: Chat History Persistence ⬜
+### E5-S2: Chat History Persistence [not started]
 **Goal:** Store all messages per plant in DB; load on chat screen open.
 
 **User Story:**
@@ -383,7 +385,7 @@ Response: `{ "reply": "...", "timestamp": "..." }`
 
 ## E6 — Care Schedule & Reminders
 
-### E6-S1: Auto-Generate Care Schedule ⬜
+### E6-S1: Auto-Generate Care Schedule [not started]
 **Goal:** After saving a plant, generate a 4-week care task schedule based on Claude's care data.
 
 **User Story:**
@@ -428,7 +430,7 @@ created_at  TIMESTAMPTZ
 
 ---
 
-### E6-S2: Care Schedule Screen ⬜
+### E6-S2: Care Schedule Screen [not started]
 **Goal:** View upcoming tasks, mark complete, see overdue items.
 
 **User Story:**
@@ -457,7 +459,7 @@ created_at  TIMESTAMPTZ
 
 ## E7 — Plant Journal
 
-### E7-S1: Journal Notes Per Plant ⬜
+### E7-S1: Journal Notes Per Plant [not started]
 **Goal:** Free-text timestamped notes attached to a plant (repotting dates, observations, etc.)
 
 **User Story:**
@@ -490,12 +492,150 @@ created_at  TIMESTAMPTZ
 
 ---
 
-## Open Questions
+## E8 — Plant Health Tracking
 
-| # | Question | Needed Before |
-|---|----------|--------------|
-| 1 | Do we store the scanned image itself? (filesystem path or skip for MVP) | E3-S1 |
-| 2 | Should My Plants home screen replace the current HomeScreen entirely? | E3-S2 |
-| 3 | Bottom nav bar or side drawer for main navigation? | E3-S2 |
+Health status gives users an at-a-glance signal about how their plant is doing.
+It replaces the "confidence" badge on collection cards — confidence is an AI
+metric; health is something the user cares about every day.
+
+Health has three sources: the initial scan photo (Claude sees visible symptoms),
+chat (user describes what they're observing), and re-scanning over time.
+
+### E8-S1: Health Assessment at Scan Time [not started]
+**Goal:** When a plant is identified, Claude also assesses its visible health from the photo.
+
+**User Story:**
+> As a user, when I scan my plant I want to know not just what it is but whether it looks healthy, so I can act on any problems straight away.
+
+**Acceptance Criteria:**
+- [ ] `POST /scan` response includes `health` field: `healthy` / `needs_attention` / `concerning` / `unknown`
+- [ ] `POST /scan` response includes optional `health_notes` (e.g. "Yellowing on lower leaves suggests overwatering")
+- [ ] `POST /plants` stores `health` and `health_notes` on save
+- [ ] ResultScreen shows a health badge below the confidence badge
+- [ ] Health badge colours: green / amber / red / grey
+- [ ] `plants` table gains `health` VARCHAR(20) and `health_notes` TEXT columns (migration)
+- [ ] Collection card shows health badge instead of confidence badge
+- [ ] `unknown` health shows no badge (clean default before any assessment)
+
+**Claude prompt change:**
+Add to system prompt: assess visible health signs (leaf colour, spots, drooping,
+pests) and return `health` + `health_notes` alongside plant identification.
+
+**Health values:**
+| Value | Meaning | Badge colour |
+|-------|---------|-------------|
+| `healthy` | No visible issues | Green |
+| `needs_attention` | Minor concerns (slight yellowing, dry soil) | Amber |
+| `concerning` | Clear problems (spots, pests, severe wilting) | Red |
+| `unknown` | Could not assess from photo | No badge |
+
+**DB: plants table additions**
+```
+health        VARCHAR(20) default 'unknown'
+health_notes  TEXT nullable
+```
+
+**Edge Cases:**
+- Claude cannot assess health from the photo → return `unknown`, no notes
+- User saves with `unknown` health → no badge shown, not an error
+- `health_notes` is long → store fully, show truncated on card (full on detail)
+- Old saved plants before this feature → default `unknown` via migration
+
+**Tests to write:**
+- Unit: `POST /scan` returns `health` field in response
+- Unit: `POST /plants` stores health and health_notes
+- Widget: health badge shows correct colour per value
+- Widget: `unknown` health shows no badge
+
+**Dependencies:** E2-S3 complete [done], E3-S1 complete [done]
 
 ---
+
+### E8-S2: Health Updates from Chat [not started]
+**Goal:** When a user describes symptoms in chat, Claude updates the plant's health status.
+
+**User Story:**
+> As a user, when I tell my plant assistant "the leaves are going yellow at the edges" I want the app to flag my plant as needing attention, not just give me text advice.
+
+**Acceptance Criteria:**
+- [ ] After each chat reply, Claude returns an optional `health_update` object
+- [ ] If `health_update` present: `PATCH /plants/{id}` updates health + health_notes
+- [ ] Collection card health badge updates immediately (no pull-to-refresh needed)
+- [ ] Chat reply includes the health context ("I've updated your plant's status to Needs Attention")
+- [ ] Health history not stored (only current status matters for MVP)
+
+**How it works:**
+Claude's chat system prompt includes the current health status. When the user
+describes symptoms, Claude decides whether to update health and returns a
+structured field alongside the conversational reply.
+
+**Edge Cases:**
+- User says "it's fine now" after previous warning → health can go back to `healthy`
+- Claude not confident enough to update → returns no `health_update`, status unchanged
+- Chat message unrelated to health → no update, normal reply
+
+**Dependencies:** E5-S1 complete (chat exists), E8-S1 complete (health field exists)
+
+---
+
+## Open Questions
+
+| # | Question | Needed Before | Status |
+|---|----------|--------------|--------|
+| 1 | Do we store the scanned image itself? (filesystem path or skip for MVP) | E3-S1 | Open |
+| 2 | Should My Plants home screen replace the current HomeScreen entirely? | E3-S2 | **Resolved: yes** |
+| 3 | Bottom nav bar or side drawer for main navigation? | E3-S2 | **Resolved: bottom nav bar in E3-S2** |
+| 4 | Should confidence badge stay on the collection card? | E3-S2 | **Resolved: replaced by health badge (E8-S1); show ⚠ only for low confidence** |
+
+---
+
+---
+
+## Bugs
+
+### BUG-001: No way to return to My Plants from ResultScreen [not started]
+**Reported:** 2026-07-15
+
+**Description:**
+Once a user scans a plant and lands on ResultScreen, there is no navigation
+path back to My Plants. The only button is "Scan Another Plant" which
+double-pops to CaptureScreen. The AppBar has no back arrow
+(automaticallyImplyLeading: false). The user is trapped in the scan flow
+unless they scan again.
+
+**Steps to reproduce:**
+1. Open the app, log in
+2. Tap the FAB camera button on My Plants
+3. Take or choose a photo
+4. Tap "Scan This Plant"
+5. View the result screen
+6. There is no button or gesture to return to My Plants
+
+**Expected:** A clear path back to My Plants (back arrow, "Back to My Plants"
+button, or "Done" that pops the entire scan flow)
+
+**Actual:** Only option is "Scan Another Plant" which lands on CaptureScreen,
+not My Plants
+
+**Navigation stack at the point of the bug:**
+```
+MyPlantsScreen → CaptureScreen → PreviewScreen → ResultScreen
+                                                  ^ user is here, no way back
+```
+
+**Fix options:**
+1. Re-enable the AppBar back arrow on ResultScreen — pops one level to
+   PreviewScreen, which has its own back to CaptureScreen. Correct but
+   requires multiple taps.
+2. Add a "Done" button that pops to root (popUntil ModalRoute.withName('/home'))
+3. Replace "Scan Another Plant" with two options: "Scan Another" and "Done"
+
+**Recommended fix:** Option 2 — a "Done" button using `popUntil` that clears
+the entire scan stack in one tap. Keep "Scan Another Plant" as-is.
+
+**Affected screens:** ResultScreen
+**Dependencies:** none — but best fixed alongside E4-S1 (Plant Detail Screen).
+Fixing navigation without a working detail screen means the user gets back to
+My Plants but still cannot see the plant they just saved. The two stories form
+a complete user journey: scan → save → view detail. Recommended to pick up
+BUG-001 in the same branch as E4-S1.

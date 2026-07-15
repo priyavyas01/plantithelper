@@ -47,7 +47,7 @@ void main() {
             'temperature': '18-27°C',
             'tips': ['Wipe leaves'],
           },
-          if (funFact != null) 'fun_fact': funFact,
+          'fun_fact': funFact,
         };
 
     test('parses all fields', () {

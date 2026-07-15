@@ -101,3 +101,32 @@ class SavedPlant {
         createdAt: DateTime.parse(json['created_at'] as String),
       );
 }
+
+/// One item in the GET /plants list — summary only, no care JSON.
+/// The full care guide comes when you open the detail screen.
+class PlantListItem {
+  final String id;
+  final String name;
+  final String commonName;
+  final String scientificName;
+  final String confidence;
+  final DateTime createdAt;
+
+  const PlantListItem({
+    required this.id,
+    required this.name,
+    required this.commonName,
+    required this.scientificName,
+    required this.confidence,
+    required this.createdAt,
+  });
+
+  factory PlantListItem.fromJson(Map<String, dynamic> json) => PlantListItem(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        commonName: json['common_name'] as String,
+        scientificName: json['scientific_name'] as String,
+        confidence: json['confidence'] as String,
+        createdAt: DateTime.parse(json['created_at'] as String),
+      );
+}
