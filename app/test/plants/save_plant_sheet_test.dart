@@ -42,6 +42,15 @@ Widget buildScreen({
   );
 }
 
+/// Opens the save bottom sheet. Scrolls the button into view first because
+/// the care grid pushes it below the 600px test viewport height.
+Future<void> openSaveSheet(WidgetTester tester) async {
+  await tester.ensureVisible(find.text('Save This Plant'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Save This Plant'));
+  await tester.pumpAndSettle();
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -56,22 +65,19 @@ void main() {
     testWidgets('tapping Save This Plant opens bottom sheet with pre-filled name',
         (tester) async {
       await tester.pumpWidget(buildScreen(onSave: (_) async => throw UnimplementedError()));
-      await tester.tap(find.text('Save This Plant'));
-      await tester.pumpAndSettle();
+      await openSaveSheet(tester);
 
-      // Sheet should be open with the name field pre-filled
       expect(find.text('Save Plant'), findsOneWidget);
-      expect(find.text('Monstera'), findsWidgets); // in field and header
+      // Name field pre-filled with 'Monstera'
+      final field = tester.widget<TextFormField>(find.byType(TextFormField));
+      expect(field.controller?.text, 'Monstera');
     });
 
     testWidgets('empty name shows inline validation error', (tester) async {
       await tester.pumpWidget(buildScreen(onSave: (_) async => throw UnimplementedError()));
-      await tester.tap(find.text('Save This Plant'));
-      await tester.pumpAndSettle();
+      await openSaveSheet(tester);
 
-      // Clear the name field
       await tester.enterText(find.byType(TextFormField), '');
-      // Tap the Save button inside the sheet
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
       await tester.pump();
 
@@ -81,66 +87,48 @@ void main() {
     testWidgets('save button is disabled while request is in-flight', (tester) async {
       final completer = Completer<SavedPlant>();
       await tester.pumpWidget(buildScreen(onSave: (_) => completer.future));
-      await tester.tap(find.text('Save This Plant'));
-      await tester.pumpAndSettle();
+      await openSaveSheet(tester);
 
-      // Tap Save to start the in-flight request (button shows 'Save' at this point)
+      // Tap Save — button shows 'Save' right now
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
-      await tester.pump(); // one frame — still in-flight, spinner shown
+      await tester.pump(); // one frame — spinner shown, no 'Save' text
 
-      // The save FilledButton in the sheet is now disabled (onPressed==null).
-      // We find it by checking all FilledButtons — the one inside the sheet
-      // has no text child while loading (it shows a spinner).
-      // Verify by checking there is no enabled FilledButton labelled 'Save'.
+      // While in-flight the button child is a spinner (no text), so the
+      // text-based finder returns nothing — confirms button is in loading state
       expect(find.widgetWithText(FilledButton, 'Save'), findsNothing);
 
-      completer.complete(SavedPlant(
-        id: 'test-id',
-        name: 'Monstera',
-        createdAt: DateTime.now(),
-      ));
+      completer.complete(SavedPlant(id: 'id', name: 'Monstera', createdAt: DateTime.now()));
     });
 
     testWidgets('on success: sheet closes, button changes to Saved, snackbar appears',
         (tester) async {
       await tester.pumpWidget(buildScreen(
-        onSave: (_) async => SavedPlant(
-          id: 'abc-123',
-          name: 'Monstera',
-          createdAt: DateTime.now(),
-        ),
+        onSave: (_) async => SavedPlant(id: 'abc', name: 'Monstera', createdAt: DateTime.now()),
       ));
 
-      await tester.tap(find.text('Save This Plant'));
-      await tester.pumpAndSettle();
+      await openSaveSheet(tester);
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
       await tester.pumpAndSettle();
 
-      // Sheet is closed — "Save Plant" header gone
-      expect(find.text('Save Plant'), findsNothing);
-      // Button now shows "Saved"
-      expect(find.text('Saved'), findsOneWidget);
-      // Snackbar visible
-      expect(find.text('Plant saved!'), findsOneWidget);
+      expect(find.text('Save Plant'), findsNothing);   // sheet closed
+      expect(find.text('Saved'), findsOneWidget);       // button updated
+      expect(find.text('Plant saved!'), findsOneWidget); // snackbar
     });
 
     testWidgets('on error: error message shown in sheet, sheet stays open',
         (tester) async {
       await tester.pumpWidget(buildScreen(
-        onSave: (_) async =>
-            throw const PlantSaveException('Could not save. Try again.'),
+        onSave: (_) async => throw const PlantSaveException('Could not save. Try again.'),
       ));
 
-      await tester.tap(find.text('Save This Plant'));
-      await tester.pumpAndSettle();
+      await openSaveSheet(tester);
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
       await tester.pumpAndSettle();
 
-      // Sheet still open
-      expect(find.text('Save Plant'), findsOneWidget);
-      // Error message visible
-      expect(find.text('Could not save. Try again.'), findsOneWidget);
-      // Save button re-enabled for retry
+      expect(find.text('Save Plant'), findsOneWidget);                   // sheet still open
+      expect(find.text('Could not save. Try again.'), findsOneWidget);   // error shown
+
+      // Save button re-enabled so user can retry
       final saveButton = tester.widget<FilledButton>(
         find.widgetWithText(FilledButton, 'Save').first,
       );
