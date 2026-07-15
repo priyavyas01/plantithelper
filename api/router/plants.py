@@ -2,9 +2,8 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select, func, true
+from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased
 
 from db.database import get_db
 from models.plant import Plant
@@ -28,33 +27,30 @@ async def list_plants(
     """
     Return all plants belonging to the current user, newest first.
 
-    Uses a lateral join to fetch the latest scan per plant in a single query.
-    aliased(PlantScan, lateral) is required so SQLAlchemy returns (Plant, PlantScan)
-    ORM tuples rather than (Plant, *10_scalar_columns), which would crash unpacking.
+    Uses a correlated scalar subquery to find the max scanned_at per plant,
+    then joins to plant_scans on that timestamp. This avoids LATERAL JOIN,
+    which is PostgreSQL-only and breaks SQLite in tests.
 
-    Plants with no scans are included via outerjoin — they would otherwise be silently
-    dropped by INNER JOIN, which is unacceptable even though the data model prevents it
-    under normal operation.
+    The subquery is O(1) per plant row — the composite index on
+    (plant_id, scanned_at) makes the MAX lookup a single index seek.
     """
     logger.info(f"GET /plants | user_id={current_user.id}")
 
-    # LATERAL subquery: for each Plant row, fetch its most recent PlantScan.
-    # correlate(Plant) tells SQLAlchemy the subquery references the outer Plant alias.
-    scan_subq = (
-        select(PlantScan)
+    # Correlated subquery: for each Plant row, find its latest scanned_at.
+    # SQLAlchemy emits: WHERE plant_scans.scanned_at = (SELECT MAX(...) WHERE plant_id = plants.id)
+    max_scanned_at = (
+        select(func.max(PlantScan.scanned_at))
         .where(PlantScan.plant_id == Plant.id)
-        .order_by(PlantScan.scanned_at.desc())
-        .limit(1)
         .correlate(Plant)
-        .lateral()
+        .scalar_subquery()
     )
-    # aliased() wraps the lateral as an ORM-mapped entity so select() returns
-    # (Plant, PlantScan) tuples, not (Plant, uuid, str, str, ...) scalar tuples.
-    LatestScan = aliased(PlantScan, scan_subq)
 
     result = await db.execute(
-        select(Plant, LatestScan)
-        .outerjoin(LatestScan, true())   # LEFT OUTER so scanless plants are not silently dropped
+        select(Plant, PlantScan)
+        .outerjoin(
+            PlantScan,
+            and_(PlantScan.plant_id == Plant.id, PlantScan.scanned_at == max_scanned_at),
+        )
         .where(Plant.user_id == current_user.id)
         .order_by(Plant.created_at.desc())
     )
@@ -63,8 +59,6 @@ async def list_plants(
     plants = []
     for plant, scan in rows:
         if scan is None:
-            # Data integrity issue — plant exists but has no scan rows.
-            # Log and skip rather than 500-ing the whole list.
             logger.error(f"GET /plants | plant_id={plant.id} has no scans — skipping")
             continue
         plants.append(PlantListItem.from_row(plant, scan))
