@@ -6,6 +6,7 @@ import hashlib
 import secrets
 import random
 import string
+import uuid
 from datetime import datetime, timezone, timedelta
 
 from db.database import get_db
@@ -45,7 +46,13 @@ async def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
 
     user_id = payload.get("sub")
-    result = await db.execute(select(User).where(User.id == user_id))
+    # SQLAlchemy's UUID column expects a uuid.UUID object, not a plain string.
+    # The JWT stores user_id as a string — convert it before querying.
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
+    result = await db.execute(select(User).where(User.id == user_uuid))
     user = result.scalar_one_or_none()
 
     if not user:
