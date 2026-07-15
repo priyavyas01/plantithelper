@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import '../../models/scan_models.dart';
+import '../../services/plant_service.dart';
 
 class ResultScreen extends StatelessWidget {
   final ScanResult result;
 
-  const ResultScreen({super.key, required this.result});
+  // onSave is injectable for widget tests. Defaults to PlantService.savePlant in production.
+  final Future<SavedPlant> Function(SavePlantRequest)? onSave;
+
+  const ResultScreen({super.key, required this.result, this.onSave});
 
   @override
   Widget build(BuildContext context) {
@@ -24,13 +28,20 @@ class ResultScreen extends StatelessWidget {
             const SizedBox(height: 24),
             _CareGrid(care: result.care),
             const SizedBox(height: 32),
-            _ActionButtons(),
+            _ResultActions(
+              result: result,
+              onSave: onSave ?? PlantService.savePlant,
+            ),
           ],
         ),
       ),
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Plant header: name, scientific name, confidence badge
+// ---------------------------------------------------------------------------
 
 class _PlantHeader extends StatelessWidget {
   final ScanResult result;
@@ -80,7 +91,7 @@ class _ConfidenceBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: color),
       ),
@@ -95,6 +106,10 @@ class _ConfidenceBadge extends StatelessWidget {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Care guide 2×2 grid
+// ---------------------------------------------------------------------------
 
 class _CareGrid extends StatelessWidget {
   final CareInfo care;
@@ -179,8 +194,50 @@ class _CareCard extends StatelessWidget {
   }
 }
 
-class _ActionButtons extends StatelessWidget {
-  const _ActionButtons();
+// ---------------------------------------------------------------------------
+// Action buttons — stateful to track saved state
+// ---------------------------------------------------------------------------
+
+class _ResultActions extends StatefulWidget {
+  final ScanResult result;
+  final Future<SavedPlant> Function(SavePlantRequest) onSave;
+
+  const _ResultActions({required this.result, required this.onSave});
+
+  @override
+  State<_ResultActions> createState() => _ResultActionsState();
+}
+
+class _ResultActionsState extends State<_ResultActions> {
+  bool _saved = false;
+
+  void _openSaveSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _SavePlantSheet(
+        result: widget.result,
+        onSave: widget.onSave,
+        onSaved: _onSaveSuccess,
+      ),
+    );
+  }
+
+  // Called by the sheet after a successful save.
+  // Runs in this widget's context — safe to update state and show a snackbar.
+  void _onSaveSuccess() {
+    if (!mounted) return;
+    setState(() => _saved = true);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Plant saved!'),
+        backgroundColor: Color(0xFF4CAF50),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -188,17 +245,12 @@ class _ActionButtons extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         FilledButton.icon(
-          // E2-S4 will implement saving — stub for now
-          onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Save feature coming in the next story!'),
-              backgroundColor: Color(0xFF4CAF50),
-            ),
-          ),
-          icon: const Icon(Icons.bookmark_add_outlined),
-          label: const Text('Save This Plant'),
+          onPressed: _saved ? null : _openSaveSheet,
+          icon: Icon(_saved ? Icons.bookmark : Icons.bookmark_add_outlined),
+          label: Text(_saved ? 'Saved' : 'Save This Plant'),
           style: FilledButton.styleFrom(
             backgroundColor: const Color(0xFF4CAF50),
+            disabledBackgroundColor: Colors.grey[300],
             padding: const EdgeInsets.symmetric(vertical: 14),
           ),
         ),
@@ -217,6 +269,157 @@ class _ActionButtons extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Save bottom sheet — name field + save/cancel buttons
+// ---------------------------------------------------------------------------
+
+class _SavePlantSheet extends StatefulWidget {
+  final ScanResult result;
+  final Future<SavedPlant> Function(SavePlantRequest) onSave;
+  final VoidCallback onSaved;
+
+  const _SavePlantSheet({
+    required this.result,
+    required this.onSave,
+    required this.onSaved,
+  });
+
+  @override
+  State<_SavePlantSheet> createState() => _SavePlantSheetState();
+}
+
+class _SavePlantSheetState extends State<_SavePlantSheet> {
+  late final TextEditingController _nameController;
+  final _formKey = GlobalKey<FormState>();
+  bool _isSaving = false;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    // Pre-fill with common name — user can rename it
+    _nameController = TextEditingController(text: widget.result.commonName);
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _isSaving = true;
+      _errorMessage = null;
+    });
+
+    final request = SavePlantRequest(
+      name: _nameController.text.trim(),
+      commonName: widget.result.commonName,
+      scientificName: widget.result.scientificName,
+      confidence: widget.result.confidence,
+      care: widget.result.care,
+      funFact: widget.result.funFact,
+    );
+
+    try {
+      await widget.onSave(request);
+
+      if (!mounted) return;
+      Navigator.of(context).pop(); // close the sheet
+      widget.onSaved();            // parent: update button + show snackbar
+    } on PlantSaveException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isSaving = false;
+        _errorMessage = e.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isSaving = false;
+        _errorMessage = 'Something went wrong. Try again.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Padding adjusts for the keyboard so the sheet scrolls up
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomInset),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Save Plant',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _nameController,
+              decoration: const InputDecoration(
+                labelText: 'Plant name',
+                border: OutlineInputBorder(),
+              ),
+              maxLength: 100,
+              textCapitalization: TextCapitalization.words,
+              enabled: !_isSaving,
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Please give your plant a name';
+                }
+                return null;
+              },
+            ),
+            if (_errorMessage != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _errorMessage!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ],
+            const SizedBox(height: 16),
+            FilledButton(
+              // Disabled while saving prevents double-tap duplicate rows
+              onPressed: _isSaving ? null : _save,
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF4CAF50),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              child: _isSaving
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text('Save'),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

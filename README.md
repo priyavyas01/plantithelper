@@ -96,10 +96,10 @@ flutter pub get
 
 ### 2. Configure the API base URL
 
-Open `app/lib/services/auth_service.dart` and update:
+Open `app/lib/config/app_config.dart` and update `apiBaseUrl`:
 
 ```dart
-static const String _baseUrl = 'http://localhost:8000';
+static const String apiBaseUrl = 'http://localhost:8000';
 ```
 
 > If running on a **physical device**, replace `localhost` with your Mac's local IP (e.g. `192.168.1.x`). Find it with `ipconfig getifaddr en0`.
@@ -118,8 +118,39 @@ flutter run
 - [x] Token refresh & server-side logout
 - [x] Password reset via email code
 - [x] Auth persistence — auto-login on app launch, silent token refresh
-- [ ] Plant tracking
+- [x] Plant identification — photograph a plant, Claude AI identifies it with care guide
+- [x] Save identified plants to your personal collection
+- [ ] My Plants collection screen
+- [ ] Plant detail view
+- [ ] Chat with Claude about a saved plant
 - [ ] Care reminders
+
+---
+
+## API Endpoints
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/auth/register` | — | Create account |
+| POST | `/auth/login` | — | Login, get JWT pair |
+| POST | `/auth/refresh` | — | Rotate refresh token |
+| POST | `/auth/logout` | — | Revoke refresh token |
+| GET | `/auth/me` | ✅ | Get current user |
+| POST | `/auth/forgot-password` | — | Send reset code via email |
+| POST | `/auth/reset-password` | — | Reset password with code |
+| POST | `/scan` | ✅ | Identify a plant from an image |
+| POST | `/plants` | ✅ | Save a plant to collection |
+
+---
+
+## Database Schema
+
+| Table | Key columns |
+|---|---|
+| `users` | id, email, hashed_password, created_at |
+| `refresh_tokens` | id, user_id, token_hash, expires_at, revoked |
+| `password_reset_tokens` | id, user_id, code_hash, expires_at, used |
+| `plants` | id, user_id, name, common_name, scientific_name, confidence, care_json, fun_fact, created_at |
 
 ---
 

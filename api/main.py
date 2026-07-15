@@ -1,13 +1,13 @@
 from contextlib import asynccontextmanager
 import logging
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from core.limiter import limiter
 from db.init_db import init_db
-from router import auth, scan
+from router import auth, scan, plants
 
 # Configure logging format for the whole app.
 # %(asctime)s  — timestamp
@@ -54,6 +54,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(scan.router)
+app.include_router(plants.router)
 
 
 @app.get("/health")

@@ -1,7 +1,7 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import '../config/app_config.dart';
 import '../models/scan_models.dart';
 
@@ -39,6 +39,7 @@ class ScanService {
           'image',
           imageBytes,
           filename: 'plant.jpg',
+          contentType: MediaType('image', 'jpeg'),
         ),
       );
 
