@@ -364,7 +364,46 @@ stack in one tap. Keep "Scan Another Plant" as-is for users who want to scan aga
 - [x] If plant was saved before tapping "Done", it appears in the list immediately
 
 
-### E4-S3: Health Assessment at Scan Time [done]
+### E4-BUG-002: No persistent navigation — no way to get home easily [not started]
+**Reported:** 2026-07-15
+
+**Problem:** The app has no persistent navigation shell. Once a user drills into a plant
+detail or enters the scan flow, the only way back to My Plants is the AppBar back arrow
+(subtle, easy to miss on iOS) or the gray "Done" text button on ResultScreen (small,
+low-contrast, easy to overlook). There is no bottom navigation bar even though one was
+planned and decided in E3-S2 but never implemented.
+
+**Navigation stack that exposes the problem:**
+```
+HomeScreen (MyPlantsScreen)
+  → PlantDetailScreen         ← only AppBar back arrow to go home
+      → CaptureScreen
+          → PreviewScreen
+              → ResultScreen  ← "Done" is gray text, easy to miss
+```
+
+**Root causes:**
+1. `HomeScreen` is a thin wrapper over `MyPlantsScreen` with no navigation shell
+2. "Done" on ResultScreen is styled as a `TextButton` with gray color — visually the
+   weakest element on the screen, below two more prominent buttons
+3. No bottom nav bar means there is no persistent anchor point to return to
+
+**Fix:**
+1. Rebuild `HomeScreen` as a navigation shell with a `NavigationBar` (Material 3)
+   — Tab 0: My Plants, Tab 1: Scan (navigates to CaptureScreen)
+2. Make "Back to My Plants" on ResultScreen an `OutlinedButton` (visible, not just text)
+
+**Acceptance Criteria:**
+- [ ] Bottom navigation bar visible on My Plants screen with two tabs: "My Plants" and "Scan"
+- [ ] Tapping "Scan" tab navigates to CaptureScreen
+- [ ] After completing a scan (save or skip), bottom nav is still visible on return to My Plants
+- [ ] "Back to My Plants" on ResultScreen is an OutlinedButton, not gray text
+- [ ] Tapping "Back to My Plants" clears scan stack and lands on My Plants tab
+- [ ] Tapping the system back button from PlantDetailScreen returns to My Plants (unchanged)
+- [ ] No existing tests broken
+
+
+
 **Goal:** Every scan returns a plain-English, actionable health observation alongside
 plant identification. Health replaces confidence everywhere in the UI — confidence is
 an AI-internal metric the user gains nothing from seeing. Health is something they can

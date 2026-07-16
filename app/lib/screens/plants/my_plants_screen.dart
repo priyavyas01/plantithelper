@@ -12,7 +12,12 @@ class MyPlantsScreen extends StatefulWidget {
   // back to PlantService.getPlants.
   final Future<PlantListResult> Function()? getPlants;
 
-  const MyPlantsScreen({super.key, this.getPlants});
+  // Increment this from a parent widget to trigger a data reload.
+  // Used by HomeScreen after returning from the Scan tab so the list
+  // reflects any newly saved plant without requiring a pull-to-refresh.
+  final int reloadTrigger;
+
+  const MyPlantsScreen({super.key, this.getPlants, this.reloadTrigger = 0});
 
   @override
   State<MyPlantsScreen> createState() => _MyPlantsScreenState();
@@ -28,6 +33,15 @@ class _MyPlantsScreenState extends State<MyPlantsScreen> {
   void initState() {
     super.initState();
     _loadPlants();
+  }
+
+  @override
+  void didUpdateWidget(MyPlantsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.reloadTrigger != oldWidget.reloadTrigger) {
+      debugPrint('[MyPlantsScreen] reloadTrigger changed — reloading plants');
+      _loadPlants();
+    }
   }
 
   Future<void> _loadPlants() async {
@@ -107,13 +121,6 @@ class _MyPlantsScreenState extends State<MyPlantsScreen> {
         onRefresh: _loadPlants,
         color: AppTheme.green,
         child: _buildBody(),
-      ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppTheme.green,
-        foregroundColor: Colors.white,
-        tooltip: 'Scan a plant',
-        onPressed: _navigateToScan,
-        child: const Icon(Icons.camera_alt_outlined),
       ),
     );
   }

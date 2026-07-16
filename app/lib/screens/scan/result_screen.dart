@@ -347,10 +347,18 @@ class _ResultActionsState extends State<_ResultActions> {
           ),
         ),
         const SizedBox(height: 12),
-        TextButton(
+        // Clears the entire scan stack — lands back on My Plants.
+        // OutlinedButton (not TextButton) so it's visually distinct and easy to find.
+        OutlinedButton.icon(
           onPressed: () =>
               Navigator.of(context).popUntil(ModalRoute.withName('/home')),
-          child: const Text('Done', style: TextStyle(color: Colors.grey)),
+          icon: const Icon(Icons.home_outlined),
+          label: const Text('Back to My Plants'),
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            side: BorderSide(color: Colors.grey[400]!),
+            foregroundColor: Colors.grey[700],
+          ),
         ),
       ],
     );
