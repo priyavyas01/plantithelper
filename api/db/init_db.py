@@ -6,6 +6,9 @@ from db.database import engine, Base
 # instead, but this is useful for local dev and testing.
 import models.user          # noqa: F401
 import models.refresh_token # noqa: F401
+import models.plant         # noqa: F401
+import models.plant_scan    # noqa: F401
+import models.chat_message  # noqa: F401
 
 
 async def init_db():

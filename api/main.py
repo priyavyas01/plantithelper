@@ -7,7 +7,7 @@ from slowapi.errors import RateLimitExceeded
 
 from core.limiter import limiter
 from db.init_db import init_db
-from router import auth, scan, plants
+from router import auth, scan, plants, chat
 
 # Configure logging format for the whole app.
 # %(asctime)s  — timestamp
@@ -55,6 +55,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(scan.router)
 app.include_router(plants.router)
+app.include_router(chat.router)
 
 
 @app.get("/health")

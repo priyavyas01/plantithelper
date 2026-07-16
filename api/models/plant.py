@@ -38,3 +38,10 @@ class Plant(Base):
         cascade="all, delete-orphan",
         lazy="raise",
     )
+    chat_messages = relationship(
+        "ChatMessage",
+        back_populates="plant",
+        order_by="ChatMessage.created_at.asc()",
+        cascade="all, delete-orphan",
+        lazy="raise",
+    )

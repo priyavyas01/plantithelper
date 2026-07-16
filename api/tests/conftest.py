@@ -22,6 +22,8 @@ import models.user                  # noqa: F401 — registers model with Base.m
 import models.refresh_token         # noqa: F401
 import models.password_reset_token  # noqa: F401
 import models.plant                 # noqa: F401
+import models.plant_scan            # noqa: F401
+import models.chat_message          # noqa: F401
 
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
