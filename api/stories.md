@@ -31,12 +31,12 @@
 | E1 | Foundation & Auth | 3 | 3 |
 | E2 | Plant Scan & Identification | 3 | 3 |
 | E3 | Save & My Plants Collection | 3 | 3 |
-| E4 | Plant Detail, Health & Scan History | 4 | 3 |
+| E4 | Plant Detail, Health & Scan History | 4 | 4 |
 | E5 | Chat with Your Plant | 3 | 0 |
 | E6 | Care Schedule & Reminders | 2 | 0 |
 | E7 | Plant Journal | 1 | 0 |
 
-**Total: 19 stories — 12 done**
+**Total: 19 stories — 13 done**
 
 **Roadmap rationale (updated 2026-07-15):**
 - E8 (Plant Health Tracking) was dissolved. Health assessment belongs at scan time
@@ -308,7 +308,7 @@ future improvement using shared_preferences.
 - [x] Tips section: bulleted list from Claude
 - [x] Fun fact shown if present (hidden if null)
 - [x] Saved date shown: "Saved 3 days ago"
-- [ ] "Scan Again" button → CaptureScreen (replaces scan data on save — E4-S2)
+- [x] "Scan Again" button → CaptureScreen (replaces scan data on save — E4-S2)
 - [x] "Delete Plant" option in app bar menu → confirm dialog → DELETE /plants/{id} → back to collection
 - [x] `GET /plants/{id}` endpoint returns full plant data
 
@@ -364,7 +364,7 @@ stack in one tap. Keep "Scan Another Plant" as-is for users who want to scan aga
 - [x] If plant was saved before tapping "Done", it appears in the list immediately
 
 
-### E4-BUG-002: No persistent navigation — no way to get home easily [not started]
+### E4-BUG-002: No persistent navigation — no way to get home easily [done]
 **Reported:** 2026-07-15
 
 **Problem:** The app has no persistent navigation shell. Once a user drills into a plant
@@ -544,7 +544,7 @@ Delete `app/lib/widgets/confidence_badge.dart` and all imports once all usages a
 
 ---
 
-### E4-S2: Scan History [not started]
+### E4-S2: Scan History [done]
 **Goal:** Re-scanning a saved plant adds a new scan record rather than overwriting the existing
 data. Every scan is preserved. PlantDetailScreen shows the current scan plus a scrollable history.
 Claude receives scan history as context in chat — enabling observations like "your plant's health
